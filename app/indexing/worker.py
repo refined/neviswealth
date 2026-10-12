@@ -57,7 +57,6 @@ class IndexingWorker:
             self._thread.join(timeout)
 
     def notify(self) -> None:
-        """Wake the worker immediately (called after a document is created or re-queued)."""
         self._wake.set()
 
     @property
@@ -82,7 +81,6 @@ class IndexingWorker:
     def process_pending(
         self, limit: int | None = None, stop_event: threading.Event | None = None
     ) -> int:
-        """Process queued documents until the queue is empty (or `limit` is reached)."""
         processed = 0
         while limit is None or processed < limit:
             if stop_event is not None and stop_event.is_set():

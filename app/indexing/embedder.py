@@ -30,8 +30,6 @@ def l2_normalize(m: np.ndarray) -> np.ndarray:
 
 
 class FastEmbedEmbedder:
-    """Small ONNX encoder (no torch, CPU-only) via `fastembed`."""
-
     def __init__(self, model_name: str, cache_dir: str | None = None, threads: int = 1) -> None:
         from fastembed import TextEmbedding
 

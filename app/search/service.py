@@ -1,5 +1,3 @@
-"""Query-time search: combines index lookups (app.table.search) into one scored result list."""
-
 import difflib
 import html
 import uuid
@@ -23,8 +21,7 @@ from app.search.scoring import (
     score_document,
 )
 from app.search.taxonomy import DocumentType, TaxonomyMatcher
-from app.table import documents
-from app.table import search as queries
+from app.table import clients, documents
 from app.table.records import ClientMatch
 
 # Candidates fetched per retrieval channel before fusion.
@@ -87,7 +84,7 @@ class SearchService:
     def search_clients(self, conn: Connection, query: str, limit: int) -> list[schemas.ClientHit]:
         q = normalize(query)
         fuzzy = len(q) >= FUZZY_MIN_QUERY_LENGTH
-        matches = queries.client_matches(
+        matches = clients.client_matches(
             conn,
             q,
             fuzzy=fuzzy,
@@ -153,13 +150,13 @@ class SearchService:
         signals: dict[uuid.UUID, DocumentSignals] = defaultdict(DocumentSignals)
 
         # 1. Lexical: inverted index over title (weight A) and content (weight B).
-        for match in queries.lexical_matches(conn, query, limit=_CANDIDATES):
+        for match in documents.lexical_matches(conn, query, limit=_CANDIDATES):
             signals[match.id].lexical_rank = match.rank
             signals[match.id].in_title = match.in_title
 
         # 2. Semantic: nearest chunk embeddings (HNSW).
         query_vector = self.embedder.embed_query(query)
-        for nearest in queries.nearest_documents(
+        for nearest in documents.nearest_documents(
             conn, query_vector, chunk_limit=self.semantic_candidate_chunks
         ):
             signals[nearest.document_id].semantic = nearest.similarity
@@ -202,10 +199,10 @@ class SearchService:
         return hits
 
     def _documents_of_type(self, conn: Connection, doc_type: DocumentType) -> set[uuid.UUID]:
-        by_phrase = queries.documents_with_phrases(conn, doc_type.all_phrases, limit=_CANDIDATES)
+        by_phrase = documents.documents_with_phrases(conn, doc_type.all_phrases, limit=_CANDIDATES)
         # Absolute centroid similarities differ per type, so keep the documents close to the best
         # one (and above a floor) rather than applying one global threshold.
-        nearest = queries.nearest_documents(
+        nearest = documents.nearest_documents(
             conn, self.taxonomy.centroid(doc_type), chunk_limit=self.semantic_candidate_chunks
         )
         top = max((n.similarity for n in nearest), default=0.0)
@@ -230,13 +227,13 @@ class SearchService:
         headlines: dict[uuid.UUID, str] = {}
         if lexical_ids:
             headlines.update(
-                queries.query_headlines(
+                documents.query_headlines(
                     conn, lexical_ids, query, options=_HEADLINE_OPTIONS, strip_chars=strip
                 )
             )
         for doc_type, ids in by_type.items():
             headlines.update(
-                queries.phrase_headlines(
+                documents.phrase_headlines(
                     conn, ids, doc_type.all_phrases, options=_HEADLINE_OPTIONS, strip_chars=strip
                 )
             )

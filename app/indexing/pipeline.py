@@ -1,5 +1,3 @@
-"""Post-processing of a single document: chunking, chunk embeddings and the summary."""
-
 from dataclasses import dataclass
 
 from app.indexing.embedder import Embedder

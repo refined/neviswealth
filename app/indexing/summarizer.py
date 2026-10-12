@@ -1,5 +1,3 @@
-"""Extractive document summaries produced with the same embedding model used for search."""
-
 from typing import Protocol
 
 import numpy as np

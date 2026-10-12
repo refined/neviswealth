@@ -1,5 +1,3 @@
-"""Pure text-processing helpers used at indexing and query time (no I/O, no models)."""
-
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -24,7 +22,6 @@ _GENERIC_PATH_SEGMENTS = {
 
 
 def normalize(text: str) -> str:
-    """Unicode-normalize, case-fold and collapse whitespace."""
     return _WS_RE.sub(" ", unicodedata.normalize("NFKC", text)).strip().casefold()
 
 
@@ -79,7 +76,6 @@ def social_link_terms(link: str) -> list[str]:
 def client_field_terms(
     first_name: str, last_name: str, email: str, social_links: list[str]
 ) -> dict[str, list[str]]:
-    """Identity terms per client field; used for indexing and for explaining matches."""
     social: list[str] = []
     for link in social_links:
         social.extend(social_link_terms(link))
@@ -124,7 +120,6 @@ def _ends_with_abbreviation(text: str) -> bool:
 
 
 def split_sentences(text: str) -> list[Span]:
-    """Split text into sentences with character offsets into the original string."""
     spans: list[Span] = []
     start = 0
     for match in _SENTENCE_END_RE.finditer(text):
@@ -145,7 +140,6 @@ def _make_span(text: str, start: int, end: int) -> Span:
 
 
 def _split_long(span: Span, max_words: int) -> list[Span]:
-    """Hard-split a single over-long sentence into word windows."""
     words = list(re.finditer(r"\S+", span.text))
     out = []
     for i in range(0, len(words), max_words):

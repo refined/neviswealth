@@ -22,7 +22,6 @@ _ADVISORY_LOCK_KEY = 4_270_001
 
 
 def migrate(database_url: str, directory: Path = MIGRATIONS_DIR) -> list[str]:
-    """Apply pending migrations and return the versions applied by this call."""
     applied: list[str] = []
     with psycopg.connect(database_url, autocommit=True) as conn:
         conn.execute("SELECT pg_advisory_lock(%s)", (_ADVISORY_LOCK_KEY,))

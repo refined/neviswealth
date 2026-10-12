@@ -54,8 +54,6 @@ class ChunkRecord:
 
 @dataclass(frozen=True, slots=True)
 class NewChunk:
-    """A chunk produced by the indexing pipeline, ready to be stored."""
-
     ordinal: int
     text: str
     char_start: int

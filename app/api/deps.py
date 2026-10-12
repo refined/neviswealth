@@ -15,8 +15,6 @@ from app.search.service import SearchService
 
 @dataclass
 class Container:
-    """Long-lived objects created once at startup and shared by all requests."""
-
     settings: Settings
     pool: ConnectionPool
     embedder: Embedder

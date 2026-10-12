@@ -1,25 +1,20 @@
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, status
-from fastapi.responses import RedirectResponse
+from fastapi import Depends, FastAPI
 
-from app import schemas
-from app.api import clients, documents, search
-from app.api.deps import Container, get_container, require_api_key
+from app.api import clients, documents, health, search, ui
+from app.api.deps import Container, require_api_key
 from app.config import Settings, get_settings
 from app.indexing.embedder import Embedder, create_embedder
 from app.indexing.summarizer import ExtractiveSummarizer
 from app.indexing.worker import IndexingWorker
-from app.schemas import NoCacheStaticFiles
 from app.search.service import SearchService
 from app.search.taxonomy import TaxonomyMatcher
 from app.table.connection import create_pool
 from app.table.records import EMBEDDING_DIM
 
-STATIC_DIR = Path(__file__).parent / "static"
 DOCS_URL = "/api"  # Swagger UI
 OPENAPI_URL = "/api/openapi.json"
 
@@ -106,26 +101,8 @@ def create_app(settings: Settings | None = None, embedder: Embedder | None = Non
     app.include_router(documents.router, dependencies=protected)
     app.include_router(search.router, dependencies=protected)
 
-    @app.get("/health", response_model=schemas.Health, tags=["health"])
-    def health(container: Container = Depends(get_container)) -> schemas.Health:
-        try:
-            with container.pool.connection(timeout=5) as conn:
-                conn.execute("SELECT 1")
-        except Exception as exc:
-            raise HTTPException(
-                status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database unavailable"
-            ) from exc
-        return schemas.Health(
-            status="ok",
-            database="ok",
-            embedding_model=container.embedder.model_name,
-            worker_running=container.worker.is_running,
-        )
-
-    app.mount("/ui", NoCacheStaticFiles(directory=STATIC_DIR, html=True), name="ui")
-
-    @app.get("/", include_in_schema=False)
-    def root() -> RedirectResponse:
-        return RedirectResponse("/ui/")
+    app.include_router(health.router)
+    app.include_router(ui.router)
+    ui.mount_ui(app)
 
     return app

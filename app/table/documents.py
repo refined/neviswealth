@@ -1,6 +1,7 @@
 import uuid
 from collections.abc import Sequence
 
+import numpy as np
 from psycopg import Connection
 from psycopg.rows import class_row
 
@@ -11,16 +12,15 @@ from app.table.records import (
     DocumentStatus,
     Job,
     LexemeRecord,
+    LexicalMatch,
+    NearestDocument,
     NewChunk,
 )
-
-# -- CRUD ------------------------------------------------------------------------------------
 
 
 def insert_document(
     conn: Connection, *, client_id: uuid.UUID, title: str, content: str
 ) -> DocumentRecord:
-    """Insert a document; Postgres fills its full-text index, the worker does the rest."""
     with conn.cursor(row_factory=class_row(DocumentRecord)) as cur:
         cur.execute(
             """
@@ -80,7 +80,6 @@ def list_client_documents(conn: Connection, client_id: uuid.UUID) -> list[Docume
 
 
 def requeue_document(conn: Connection, document_id: uuid.UUID) -> DocumentRecord | None:
-    """Put the document back into the indexing queue; None if it does not exist."""
     with conn.cursor(row_factory=class_row(DocumentRecord)) as cur:
         cur.execute(
             """
@@ -93,9 +92,6 @@ def requeue_document(conn: Connection, document_id: uuid.UUID) -> DocumentRecord
             (document_id,),
         )
         return cur.fetchone()
-
-
-# -- index inspection ------------------------------------------------------------------------
 
 
 def list_chunks(conn: Connection, document_id: uuid.UUID) -> list[ChunkRecord]:
@@ -113,7 +109,7 @@ def list_chunks(conn: Connection, document_id: uuid.UUID) -> list[ChunkRecord]:
 
 
 def top_lexemes(conn: Connection, document_id: uuid.UUID, limit: int = 40) -> list[LexemeRecord]:
-    """The most frequent stemmed terms of the document's full-text index."""
+    # unnest(tsvector) yields one row per stemmed lexeme with its positions and weights.
     with conn.cursor(row_factory=class_row(LexemeRecord)) as cur:
         cur.execute(
             """
@@ -134,8 +130,7 @@ def top_lexemes(conn: Connection, document_id: uuid.UUID, limit: int = 40) -> li
 
 
 def claim_next_document(conn: Connection, *, stale_after_s: int, max_attempts: int) -> Job | None:
-    """Claim the oldest pending document (or one whose worker died) for indexing."""
-    # Documents stuck in `processing` that already used all attempts are given up on.
+    # Give up on documents whose worker died after their last allowed attempt.
     conn.execute(
         """
         UPDATE documents
@@ -147,6 +142,8 @@ def claim_next_document(conn: Connection, *, stale_after_s: int, max_attempts: i
         """,
         {"stale_after_s": stale_after_s, "max_attempts": max_attempts},
     )
+    # Oldest pending document, or one stuck in `processing` (its worker died). SKIP LOCKED makes
+    # concurrent workers skip rows another worker is claiming instead of waiting for them.
     with conn.cursor(row_factory=class_row(Job)) as cur:
         cur.execute(
             """
@@ -171,7 +168,7 @@ def claim_next_document(conn: Connection, *, stale_after_s: int, max_attempts: i
 def save_index_result(
     conn: Connection, job: Job, *, summary: str, chunks: Sequence[NewChunk], processing_ms: int
 ) -> bool:
-    """Store chunks + summary and mark the document ready. False if the claim was lost."""
+    # Only if the claim is still ours: a requeue in the meantime resets `locked_at`.
     updated = conn.execute(
         """
         UPDATE documents
@@ -205,7 +202,6 @@ def save_index_result(
 
 
 def record_failure(conn: Connection, job: Job, *, status: DocumentStatus, error: str) -> None:
-    """Release the claim after a failed attempt: back to `pending` for a retry, or `failed`."""
     conn.execute(
         """
         UPDATE documents
@@ -214,3 +210,108 @@ def record_failure(conn: Connection, job: Job, *, status: DocumentStatus, error:
         """,
         {"status": status.value, "error": error, "id": job.id, "locked_at": job.locked_at},
     )
+
+
+def lexical_matches(conn: Connection, query: str, *, limit: int) -> list[LexicalMatch]:
+    # websearch_to_tsquery: Google-like syntax ("quotes", OR, -minus); words are stemmed, so
+    # "bills" matches "bill". ts_rank_cd scores how many query terms occur and how close together;
+    # title terms carry weight A (1.0) vs B (0.4) for content. Normalization 32 maps the rank to
+    # [0, 1) as rank / (rank + 1).
+    with conn.cursor(row_factory=class_row(LexicalMatch)) as cur:
+        cur.execute(
+            """
+            SELECT d.id,
+                   ts_rank_cd(d.tsv, tq, 32) AS rank,
+                   to_tsvector('english', d.title) @@ tq AS in_title
+            FROM documents d, websearch_to_tsquery('english', %(q)s) AS tq
+            WHERE d.tsv @@ tq
+            ORDER BY rank DESC
+            LIMIT %(limit)s
+            """,
+            {"q": query, "limit": limit},
+        )
+        return cur.fetchall()
+
+
+def nearest_documents(
+    conn: Connection, vector: np.ndarray, *, chunk_limit: int
+) -> list[NearestDocument]:
+    # `<=>` is cosine distance (1 - cosine similarity), served by the HNSW index. Take the
+    # `chunk_limit` nearest chunks overall, then per document the best similarity and that chunk.
+    # An HNSW scan returns at most ef_search rows; keep it >= the LIMIT (transaction-local).
+    conn.execute("SELECT set_config('hnsw.ef_search', %s, true)", (str(max(40, chunk_limit)),))
+    with conn.cursor(row_factory=class_row(NearestDocument)) as cur:
+        cur.execute(
+            """
+            SELECT c.document_id,
+                   max(1 - c.distance) AS similarity,
+                   (array_agg(c.text ORDER BY c.distance))[1] AS best_chunk
+            FROM (
+                SELECT document_id, text, embedding <=> %(v)s::vector AS distance
+                FROM document_chunks
+                ORDER BY embedding <=> %(v)s::vector
+                LIMIT %(limit)s
+            ) c
+            GROUP BY c.document_id
+            """,
+            {"v": vector_literal(vector), "limit": chunk_limit},
+        )
+        return cur.fetchall()
+
+
+def documents_with_phrases(
+    conn: Connection, phrases: tuple[str, ...], *, limit: int
+) -> set[uuid.UUID]:
+    # phraseto_tsquery('utility bill') = stemmed words in this order, next to each other;
+    # tsquery_or_agg (defined in 0001_initial.sql) ORs all phrases into one query.
+    rows = conn.execute(
+        """
+        SELECT d.id
+        FROM documents d
+        WHERE d.tsv @@ (SELECT tsquery_or_agg(phraseto_tsquery('english', p))
+                        FROM unnest(%(phrases)s::text[]) AS p)
+        LIMIT %(limit)s
+        """,
+        {"phrases": list(phrases), "limit": limit},
+    )
+    return {row[0] for row in rows}
+
+
+def query_headlines(
+    conn: Connection, ids: list[uuid.UUID], query: str, *, options: str, strip_chars: str
+) -> dict[uuid.UUID, str]:
+    # ts_headline picks the content fragments with the most matches and wraps each match in the
+    # marker characters from `options`; `strip_chars` removes those markers from the content first
+    # so only real matches carry them.
+    rows = conn.execute(
+        """
+        SELECT d.id,
+               ts_headline('english', translate(d.content, %(strip)s, ''), tq, %(options)s)
+        FROM documents d, websearch_to_tsquery('english', %(q)s) AS tq
+        WHERE d.id = ANY(%(ids)s)
+        """,
+        {"q": query, "ids": ids, "options": options, "strip": strip_chars},
+    )
+    return {row[0]: row[1] for row in rows}
+
+
+def phrase_headlines(
+    conn: Connection,
+    ids: list[uuid.UUID],
+    phrases: tuple[str, ...],
+    *,
+    options: str,
+    strip_chars: str,
+) -> dict[uuid.UUID, str]:
+    rows = conn.execute(
+        """
+        SELECT d.id,
+               ts_headline('english', translate(d.content, %(strip)s, ''), x.tq, %(options)s)
+        FROM documents d,
+             (SELECT tsquery_or_agg(phraseto_tsquery('english', p)) AS tq
+              FROM unnest(%(phrases)s::text[]) AS p) AS x
+        WHERE d.id = ANY(%(ids)s)
+        """,
+        {"phrases": list(phrases), "ids": ids, "options": options, "strip": strip_chars},
+    )
+    return {row[0]: row[1] for row in rows}
