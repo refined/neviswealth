@@ -16,6 +16,13 @@ function storageSet(key, value) {
   try { localStorage.setItem(key, value); } catch { /* storage may be unavailable */ }
 }
 
+function sessionGet(key) {
+  try { return sessionStorage.getItem(key); } catch { return null; }
+}
+function sessionSet(key, value) {
+  try { sessionStorage.setItem(key, value); } catch { /* storage may be unavailable */ }
+}
+
 apiKeyInput.value = storageGet("nevis-api-key") || "";
 apiKeyInput.addEventListener("change", () => storageSet("nevis-api-key", apiKeyInput.value.trim()));
 
@@ -83,6 +90,15 @@ function statusBadge(status) {
   return h("span", { class: `badge ${status}` }, status);
 }
 
+// Navigation links shown above a page: back to the last search (if any) plus extra links.
+function breadcrumbs(...links) {
+  const lastSearch = sessionGet("nevis-last-search");
+  const q = lastSearch ? new URLSearchParams(lastSearch.split("?")[1] || "").get("q") : null;
+  const items = [lastSearch && h("a", { href: lastSearch }, `← Back to search “${q}”`), ...links]
+    .filter(Boolean);
+  return h("p", { class: "small breadcrumbs" }, items.flatMap((item, i) => (i ? [" · ", item] : [item])));
+}
+
 function render(...nodes) {
   view.replaceChildren(...nodes.filter((node) => node !== null && node !== undefined && node !== false));
 }
@@ -147,6 +163,7 @@ async function renderSearch(params) {
   const results = h("section");
   render(form, examples, results);
   if (!q) return;
+  sessionSet("nevis-last-search", location.hash);
 
   results.append(h("p", { class: "muted" }, "Searching…"));
   const query = new URLSearchParams({ q });
@@ -154,9 +171,13 @@ async function renderSearch(params) {
   const started = performance.now();
   const hits = await api("GET", `/search?${query}`);
   const ms = Math.round(performance.now() - started);
+  // Document hits carry only `client_id`; load each distinct client once (GET /clients/{id}).
+  const clientIds = [...new Set(hits.filter((x) => x.type === "document").map((x) => x.document.client_id))];
+  const owners = new Map(await Promise.all(clientIds.map(async (cid) =>
+    [cid, await api("GET", `/clients/${cid}`).catch(() => null)])));
   results.replaceChildren(
     h("p", { class: "muted small" }, `${hits.length} result${hits.length === 1 ? "" : "s"} in ${ms} ms`),
-    ...hits.map(renderHit));
+    ...hits.map((hit) => renderHit(hit, owners)));
 }
 
 function scoreView(score) {
@@ -164,11 +185,15 @@ function scoreView(score) {
   return h("span", { class: "score", title: "relevance score" }, bar, score.toFixed(2));
 }
 
+function clientName(client) {
+  return client ? `${client.first_name} ${client.last_name}` : "client";
+}
+
 function chips(items) {
   return h("div", { class: "chips" }, items.map((item) => h("span", { class: "badge" }, item)));
 }
 
-function renderHit(hit) {
+function renderHit(hit, owners) {
   if (hit.type === "client") {
     const c = hit.client;
     return h("article", { class: "card" },
@@ -187,7 +212,7 @@ function renderHit(hit) {
       h("span", { class: "badge type" }, "document"),
       h("a", { class: "card-title", href: `#/documents/${d.id}` }, d.title),
       statusBadge(d.status),
-      h("a", { class: "small", href: `#/clients/${d.client_id}` }, d.client_name),
+      h("a", { class: "small", href: `#/clients/${d.client_id}` }, clientName(owners.get(d.client_id))),
       scoreView(hit.score)),
     chips(hit.matched_on),
     hit.highlight && h("div", { class: "snippet small" }, safeHighlight(hit.highlight)),
@@ -277,7 +302,7 @@ async function renderClient(id) {
     : h("p", { class: "muted" }, "No documents yet.");
 
   render(
-    h("p", { class: "small" }, h("a", { href: "#/clients" }, "← Clients")),
+    breadcrumbs(h("a", { href: "#/clients" }, "All clients")),
     h("h1", {}, `${client.first_name} ${client.last_name}`),
     h("dl", { class: "meta card" },
       h("dt", {}, "Email"), h("dd", {}, client.email),
@@ -326,6 +351,7 @@ function contentView(content, summary, chunk) {
 async function renderDocument(id) {
   const [doc, index] = await Promise.all([
     api("GET", `/documents/${id}`), api("GET", `/documents/${id}/index`)]);
+  const client = await api("GET", `/clients/${doc.client_id}`);
   let selectedChunk = null;
   const contentSlot = h("div");
   const drawContent = () => contentSlot.replaceChildren(contentView(doc.content, doc.summary, selectedChunk));
@@ -360,7 +386,13 @@ async function renderDocument(id) {
 
   const isBusy = doc.status === "pending" || doc.status === "processing";
   render(
-    h("p", { class: "small" }, h("a", { href: `#/clients/${doc.client_id}` }, "← Client")),
+    breadcrumbs(h("a", { href: `#/clients/${client.id}` }, `All documents of ${client.first_name} ${client.last_name}`)),
+    h("section", { class: "card client-card" },
+      h("div", { class: "card-head" },
+        h("span", { class: "badge type" }, "client"),
+        h("a", { class: "card-title", href: `#/clients/${client.id}` }, `${client.first_name} ${client.last_name}`),
+        h("span", { class: "muted small" }, client.email)),
+      client.description && h("div", { class: "summary small" }, client.description)),
     h("div", { class: "card-head" }, h("h1", {}, doc.title), statusBadge(doc.status), reprocess),
     isBusy && h("p", { class: "muted" }, "Indexing in progress — this page refreshes automatically."),
     doc.error && h("p", { class: "error" }, `Last error: ${doc.error}`),
