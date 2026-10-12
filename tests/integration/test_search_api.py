@@ -79,8 +79,10 @@ def test_ready_document_has_summary_and_semantic_signal(
     doc = make_document(client["id"], "Electricity bill", BILL)
     worker.process_pending()
     hit = _search(api, "electricity", type="document")[0]
-    assert hit["document"]["id"] == doc["id"]
-    assert hit["document"]["client_name"] == "Maria Garcia"
+    # Hits embed the same Document as GET /documents/{id}; the client is fetched separately.
+    assert hit["document"] == api.get(f"/documents/{doc['id']}").json()
+    assert "client" not in hit
+    assert hit["document"]["client_id"] == client["id"]
     assert hit["document"]["summary"]
     assert hit["matched_on"][:2] == ["title", "semantic"]
 

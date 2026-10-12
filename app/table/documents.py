@@ -50,6 +50,20 @@ def get_document(conn: Connection, document_id: uuid.UUID) -> DocumentRecord | N
         return cur.fetchone()
 
 
+def get_documents(conn: Connection, document_ids: list[uuid.UUID]) -> list[DocumentRecord]:
+    with conn.cursor(row_factory=class_row(DocumentRecord)) as cur:
+        cur.execute(
+            """
+            SELECT id, client_id, title, content, created_at, status, summary, attempts, error,
+                   processed_at, processing_ms
+            FROM documents
+            WHERE id = ANY(%s)
+            """,
+            (document_ids,),
+        )
+        return cur.fetchall()
+
+
 def list_client_documents(conn: Connection, client_id: uuid.UUID) -> list[DocumentRecord]:
     with conn.cursor(row_factory=class_row(DocumentRecord)) as cur:
         cur.execute(

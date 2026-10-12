@@ -7,7 +7,7 @@ from psycopg import Connection
 from psycopg.rows import class_row
 
 from app.table.connection import vector_literal
-from app.table.records import ClientMatch, DocumentBriefRecord, LexicalMatch, NearestDocument
+from app.table.records import ClientMatch, LexicalMatch, NearestDocument
 
 
 def escape_like(value: str) -> str:
@@ -155,18 +155,3 @@ def phrase_headlines(
         {"phrases": list(phrases), "ids": ids, "options": options, "strip": strip_chars},
     )
     return {row[0]: row[1] for row in rows}
-
-
-def document_briefs(conn: Connection, ids: list[uuid.UUID]) -> list[DocumentBriefRecord]:
-    with conn.cursor(row_factory=class_row(DocumentBriefRecord)) as cur:
-        cur.execute(
-            """
-            SELECT d.id, d.client_id, c.first_name || ' ' || c.last_name AS client_name,
-                   d.title, d.summary, d.status, d.created_at
-            FROM documents d
-            JOIN clients c ON c.id = d.client_id
-            WHERE d.id = ANY(%s)
-            """,
-            (ids,),
-        )
-        return cur.fetchall()

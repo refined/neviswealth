@@ -109,14 +109,3 @@ class NearestDocument:
     document_id: uuid.UUID
     similarity: float  # cosine similarity of the best chunk
     best_chunk: str
-
-
-@dataclass(frozen=True, slots=True)
-class DocumentBriefRecord:
-    id: uuid.UUID
-    client_id: uuid.UUID
-    client_name: str
-    title: str
-    summary: str | None
-    status: str
-    created_at: datetime

@@ -23,6 +23,7 @@ from app.search.scoring import (
     score_document,
 )
 from app.search.taxonomy import DocumentType, TaxonomyMatcher
+from app.table import documents
 from app.table import search as queries
 from app.table.records import ClientMatch
 
@@ -182,20 +183,20 @@ class SearchService:
         if not scored:
             return []
 
-        briefs = {b.id: b for b in queries.document_briefs(conn, [i for _, i, _ in scored])}
+        found = {d.id: d for d in documents.get_documents(conn, [i for _, i, _ in scored])}
         highlights = self._document_highlights(conn, query, scored)
 
         hits = []
         for score, doc_id, sig in scored:
-            brief = briefs.get(doc_id)
-            if brief is None:  # deleted between the queries
+            document = found.get(doc_id)
+            if document is None:  # deleted between the queries
                 continue
             hits.append(
                 schemas.DocumentHit(
                     score=score,
                     matched_on=document_matched_on(sig, self.semantic_min_similarity),
                     highlight=highlights.get(doc_id),
-                    document=schemas.DocumentBrief.model_validate(brief),
+                    document=schemas.Document.model_validate(document),
                 )
             )
         return hits

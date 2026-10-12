@@ -124,18 +124,6 @@ class DocumentIndex(BaseModel):
 # -- search ----------------------------------------------------------------------------------
 
 
-class DocumentBrief(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    client_id: uuid.UUID
-    client_name: str
-    title: str
-    summary: str | None
-    status: DocumentStatusLiteral
-    created_at: datetime
-
-
 class _HitBase(BaseModel):
     score: float = Field(ge=0, le=1, description="Relevance in [0, 1]; results are sorted by it.")
     matched_on: list[str] = Field(
@@ -154,7 +142,7 @@ class ClientHit(_HitBase):
 
 class DocumentHit(_HitBase):
     type: Literal["document"] = "document"
-    document: DocumentBrief
+    document: Document
 
 
 SearchHit = Annotated[ClientHit | DocumentHit, Field(discriminator="type")]
