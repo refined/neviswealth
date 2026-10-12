@@ -1,37 +1,75 @@
-# Nevis Search API
+# Nevis Search
 
-A search API for wealth advisors. It searches both clients and their documents, and finds them by
-meaning as well as by exact words:
+A service that stores clients and their documents and lets you quickly find both — by the
+exact words they contain and by what they mean.
 
-- **`NevisWealth`** finds the client `john.doe@neviswealth.com`.
-- **`address proof`** finds a **utility bill** and a **tenancy agreement**, even though neither
-  contains those words.
-- **Summaries:** every document gets an extractive summary.
+It was built as the Nevis backend home assignment: a simplified search for a WealthTech platform
+where financial advisors need to find clients and client documents quickly and intelligently.
 
-It is built for a **small CPU-only server** (1 vCPU, 4 GB RAM):
-- one 22M-parameter ONNX encoder, no GPU, torch or paid APIs;
-- the whole stack uses about **270 MB of RAM**;
-- indexing takes ~50 ms per document and search ~20-30 ms.
+## What it does
 
-> Stack: Python 3.12 · FastAPI · psycopg 3 (plain SQL) · PostgreSQL 17 (full-text + `pg_trgm` + `pgvector`) ·
-> `fastembed` (`all-MiniLM-L6-v2`) · Docker Compose.
+- **Stores clients and documents.** Advisors add clients (name, email, description, social links)
+  and attach text documents to them through a REST API.
+- **Finds clients** by name, email or any part of it, social links and description. Small typos
+  are tolerated. For example, `NevisWealth` finds `john.doe@neviswealth.com`.
+- **Finds documents by words and by meaning.** A query matches documents that contain its words
+  and documents that are about the same thing in other words. For example, `address proof` finds
+  a utility bill and a tenancy agreement, although neither contains "address proof".
+- **Summarizes documents.** Every document gets a short summary of its key sentences.
+- **Explains results.** Each hit has a relevance score, the reason it matched (name, email,
+  content, meaning, document type) and a highlighted snippet.
+
+You can use it through:
+
+- **REST API**: create clients, upload documents, search;
+- **Swagger UI** at `/api`: try every endpoint from the browser;
+- **Simple web UI** at `/ui`: search, browse clients, upload documents and see how each document
+  was indexed.
+
+### Under the hood
+
+- Documents are indexed once, when they are uploaded. Full-text search works immediately. Meaning
+  vectors and the summary are computed in the background and ready about 50 ms later. Search
+  itself only reads indexes and takes ~20-30 ms.
+- It runs on a **small CPU-only server** (1 vCPU, 4 GB RAM): one small local language model
+  (22M parameters, no GPU, no paid APIs). The whole stack uses about 270 MB of RAM.
+- Stack: Python 3.12 · FastAPI · PostgreSQL 17 (full-text search, `pg_trgm`, `pgvector`) · plain
+  SQL via psycopg 3 · `fastembed` with `all-MiniLM-L6-v2` · Docker Compose.
 
 ## Quick start
 
 ```bash
-docker compose up --build -d                    # db + app on http://localhost:8000
-docker compose exec app python scripts/seed.py  # 6 demo clients, 16 KYC-style documents
+docker compose up --build -d                    # start db + app (first build takes a few minutes)
+docker compose exec app python scripts/seed.py  # load 6 demo clients and 16 KYC-style documents
 ```
+
+Then open:
 
 | URL | What |
 |---|---|
 | http://localhost:8000/ui | Small UI: search, clients, upload documents, **document inspector** (status, summary, chunks, index terms) |
-| http://localhost:8000/docs | Swagger UI |
+| http://localhost:8000/api | Swagger UI (interactive API docs); spec at `/api/openapi.json` |
+| http://localhost:8000/health | Health check |
 | [docs/API.md](docs/API.md) | API reference (Markdown) · [docs/openapi.json](docs/openapi.json) |
 
-The embedding model is baked into the image at build time, so the container runs offline. To
-require an API key, set `API_KEY=...` in `.env` or the environment; clients then send
-`X-API-Key`.
+The API base URL is `http://localhost:8000` (endpoints such as `/clients` and `/search` sit at the
+root, as in the assignment's spec).
+
+**Port and API key.** Copy [`.env.example`](.env.example) to `.env` and change `APP_PORT` if 8000 is
+taken; all URLs above then use that port. Inside the container the app always listens on 8000, so
+`docker compose exec app python scripts/seed.py` works with any `APP_PORT`. Set `API_KEY` to
+require an `X-API-Key` header on every API call.
+
+**Stop / clean up:**
+
+```bash
+docker compose stop        # stop the containers; start again with `docker compose start`
+docker compose down        # stop and remove the containers; the database volume is kept
+docker compose down -v     # also delete the database volume (all clients and documents)
+docker compose logs -f app # follow the app logs (it prints the UI and API URLs on startup)
+```
+
+The embedding model is baked into the image at build time, so the container runs offline.
 
 ### Development
 
@@ -67,21 +105,25 @@ Responses below come from the seeded demo data; IDs and timestamps are shortened
 
 **Concept → documents that never mention it** (`GET /search?q=address proof&type=document`)
 
+Document hits carry the full `Document` (the assignment's fields plus indexing status and summary).
+The owner is fetched separately with `GET /clients/{client_id}`:
+
 ```json
 [
   {
     "type": "document", "score": 0.727, "matched_on": ["document_type:proof_of_address"],
     "highlight": "This assured shorthold <mark>tenancy</mark> <mark>agreement</mark> is made between Kensington Lettings Ltd …",
-    "document": {"title": "Residential tenancy agreement", "client_name": "Aisha Khan", "status": "ready",
-                 "summary": "This assured shorthold tenancy agreement is made between Kensington Lettings Ltd (the landlord) and Aisha Khan (the tenant). The tenant will occupy the flat at 18 Pembridge Gardens, London W2 4DU. Monthly rent is GBP 2,350, payable in advance on the first day of each month.",
-                 "id": "…", "client_id": "…", "created_at": "…"}
+    "document": {"id": "…", "client_id": "…", "title": "Residential tenancy agreement",
+                 "content": "This assured shorthold tenancy agreement is made between …", "created_at": "…",
+                 "status": "ready", "processed_at": "…", "error": null,
+                 "summary": "This assured shorthold tenancy agreement is made between Kensington Lettings Ltd (the landlord) and Aisha Khan (the tenant). The tenant will occupy the flat at 18 Pembridge Gardens, London W2 4DU. Monthly rent is GBP 2,350, payable in advance on the first day of each month."}
   },
   {
     "type": "document", "score": 0.7, "matched_on": ["document_type:proof_of_address"],
     "highlight": "Florida Power &amp; Light monthly statement for account 4471-2290. Service address: 1450 Brickell Avenue, …",
-    "document": {"title": "Electricity bill - March 2026", "client_name": "Maria Garcia", "status": "ready",
+    "document": {"title": "Electricity bill - March 2026", "status": "ready",
                  "summary": "Florida Power & Light monthly statement for account 4471-2290. Billing period: February 12 to March 13, 2026. Amount due: $143.27, payable by April 2, 2026.",
-                 "id": "…", "client_id": "…", "created_at": "…"}
+                 "…": "…"}
   }
 ]
 ```
@@ -222,8 +264,15 @@ public API.
    - IDs are UUIDs (`422` if malformed, `404` if unknown).
    - `/search` returns the flat array the spec asks for, with a `type` discriminator, `score`,
      `matched_on` and an HTML-safe `highlight`.
-   - The spec's models are extended with `created_at`, `status`, `summary` and a few extra
-     endpoints (`GET` routes, `/documents/{id}/index`, `/reprocess`, `/health`).
+   - **Compatibility with the assignment's spec is additive only.** Request bodies are exactly
+     the spec's. `Client` adds `created_at`; `Document` adds `status`, `summary`, `processed_at`
+     and `error`. The spec leaves `/search` items untyped; ours wrap the spec's `Client` /
+     `Document` objects with `type`, `score`, `matched_on` and `highlight`; a document's client is
+     fetched with `GET /clients/{client_id}`. A contract test (`tests/integration/test_misc_api.py`) fails if a
+     spec field disappears.
+   - Extra endpoints: `GET` routes, `/documents/{id}/index`, `/reprocess`, `/health`.
+   - Document hits include the full `content`, as the spec's `Document` does. For very large
+     documents a `fields` parameter or snippet-only hits would be the next step.
 
 ## Evaluation
 
@@ -245,26 +294,9 @@ held-out miss.
 
 ## Tests
 
-- **Unit** (`tests/unit`):
-  - text normalization and email/social tokenization (the `NevisWealth` case);
-  - sentence splitting with abbreviations;
-  - chunking (overlap, huge sentences, empty input);
-  - summarizer (short and redundant documents, length cap);
-  - scoring gates;
-  - taxonomy matching.
+- **Unit** (`tests/unit`)
 - **Integration** (`tests/integration`) runs against a real Postgres + pgvector (testcontainers)
-  with a deterministic hashing embedder:
-  - HTTP codes 201/202/401/404/409/422 and validation edge cases;
-  - worker state machine, retries, failure and reprocess;
-  - stale results discarded;
-  - a pending document found lexically;
-  - taxonomy expansion;
-  - garbage queries;
-  - HTML escaping of highlights;
-  - LIKE-wildcard escaping;
-  - the API key;
-  - the OpenAPI spec;
-  - the migration runner (applied once, failed migrations rolled back).
+  with a deterministic hashing embedder
 - **Config** (`tests/unit/test_config.py`): environment parsing of `Settings`.
 - **Eval** (`tests/eval`): quality with the real model, as above.
 
@@ -290,23 +322,21 @@ held-out miss.
 ## Project layout
 
 ```
-app/
-  main.py                 app factory, lifespan (pool, worker), /health, UI mount
-  config.py               settings from environment variables
-  schemas.py              API request / response models (Pydantic -> OpenAPI)
-  api/                    routers: clients, documents, search; deps (connection, API key)
-  table/                  database layer, the only place with SQL
-    records.py            row dataclasses ("DB models")
-    clients.py, documents.py, search.py   queries, inline in small functions
-    migrate.py            migration runner (python -m app.table.migrate)
-  indexing/               text processing, embedder, summarizer, pipeline, worker
-  search/                 taxonomy, scoring (pure), service (combines the queries)
-  static/                 build-free UI (vanilla JS)
+app/                 application code
+  api/               HTTP endpoints (FastAPI routers)
+  table/             database layer: all SQL queries, row types, migration runner
+  indexing/          write path: text processing, embeddings, summaries, background worker
+  search/            read path: document-type taxonomy, scoring, result assembly
+  static/            build-free UI (vanilla JS)
 db/
-  migrations/             schema as numbered .sql files (tables, GIN / trigram / HNSW indexes)
-  seed/seed_corpus.json   demo clients and documents
-scripts/                  seed.py, spike_embeddings.py, export_openapi.py
-tests/                    unit, integration (testcontainers), eval (real model + queries.json)
+  migrations/        database schema as numbered .sql files
+  seed/              demo clients and documents
+docs/                API reference (Markdown + OpenAPI spec)
+scripts/             seeding, embedding-model spike, OpenAPI export
+tests/
+  unit/              pure logic, no database
+  integration/       API + real Postgres (testcontainers), fake embedder
+  eval/              search quality with the real model (pytest -m model)
 ```
 
 ## Use of LLMs

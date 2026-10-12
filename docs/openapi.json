@@ -849,65 +849,6 @@
         ],
         "title": "Document"
       },
-      "DocumentBrief": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Id"
-          },
-          "client_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Client Id"
-          },
-          "client_name": {
-            "type": "string",
-            "title": "Client Name"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title"
-          },
-          "summary": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Summary"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "pending",
-              "processing",
-              "ready",
-              "failed"
-            ],
-            "title": "Status"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "client_id",
-          "client_name",
-          "title",
-          "summary",
-          "status",
-          "created_at"
-        ],
-        "title": "DocumentBrief"
-      },
       "DocumentCreate": {
         "properties": {
           "title": {
@@ -972,7 +913,7 @@
             "default": "document"
           },
           "document": {
-            "$ref": "#/components/schemas/DocumentBrief"
+            "$ref": "#/components/schemas/Document"
           }
         },
         "type": "object",

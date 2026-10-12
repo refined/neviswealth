@@ -35,7 +35,7 @@ wealth advisors that lets them:
 ## Stack
 
 - Python 3.12 and `uv` for dependency management.
-- FastAPI + Pydantic v2. OpenAPI/Swagger is served at `/docs`.
+- FastAPI + Pydantic v2. Swagger UI is served at `/api`, the spec at `/api/openapi.json`.
 - PostgreSQL 17 with the `pgvector` and `pg_trgm` extensions, accessed with plain SQL through
   psycopg 3 and `psycopg_pool`. There is no ORM and no Alembic.
 - Settings are a plain dataclass read from environment variables (`app/config.py`).
@@ -49,7 +49,8 @@ wealth advisors that lets them:
 
 ```bash
 uv sync                                   # install dependencies
-docker compose up --build                 # run db + app on http://localhost:8000
+docker compose up --build                 # run db + app on http://localhost:${APP_PORT:-8000}
+docker compose down                       # stop (add -v to also delete the database)
 uv run pytest                             # unit + integration tests
 uv run pytest -m model                    # quality eval with the real embedding model
 uv run ruff check . && uv run ruff format --check .

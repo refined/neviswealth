@@ -1,6 +1,7 @@
 # Nevis Search API reference
 
-- Interactive docs: `/docs` (Swagger UI).
+- Base URL: `http://localhost:8000` by default (`APP_PORT` in `.env` changes the port).
+- Interactive docs: `/api` (Swagger UI); the spec is served at `/api/openapi.json`.
 - Machine-readable spec: [`openapi.json`](openapi.json) (OpenAPI 3.1). Regenerate it with
   `uv run python -m scripts.export_openapi`.
 
@@ -12,7 +13,7 @@
   list of `{loc, msg, type}` objects.
 - **Timestamps** are ISO 8601 in UTC.
 - **Authentication** is optional. When the server has `API_KEY` set, every endpoint except
-  `/health`, `/docs`, `/openapi.json` and `/ui` requires an `X-API-Key: <key>` header. A missing or
+  `/health`, `/api` (docs), `/api/openapi.json` and `/ui` requires an `X-API-Key: <key>` header. A missing or
   wrong key returns `401`.
 
 ## Clients
@@ -105,13 +106,12 @@ discriminator:
   "score": 0.7,                        // relevance in [0, 1]
   "matched_on": ["document_type:proof_of_address"],
   "highlight": "Miami-Dade <mark>Water</mark> and Sewer Department",
-  "document": {                        // "client": {...Client} for client hits
-    "id": "…", "client_id": "…", "client_name": "Maria Garcia",
-    "title": "Water bill - April 2026", "summary": "…", "status": "ready",
-    "created_at": "…"
-  }
+  "document": { …Document… }           // same object as GET /documents/{id}
 }
 ```
+
+Client hits have `"type": "client"` and a `client` object instead of `document`. To show who owns
+a document hit, fetch `GET /clients/{document.client_id}`.
 
 `matched_on` explains why an item matched:
 
