@@ -1,0 +1,150 @@
+{
+  "clients": [
+    {
+      "key": "john_doe",
+      "first_name": "John",
+      "last_name": "Doe",
+      "email": "john.doe@neviswealth.com",
+      "description": "Senior partner at a consulting firm. Interested in sustainable investing and long-term growth.",
+      "social_links": ["https://www.linkedin.com/in/john-doe-consulting"]
+    },
+    {
+      "key": "maria_garcia",
+      "first_name": "Maria",
+      "last_name": "Garcia",
+      "email": "maria.garcia@gmail.com",
+      "description": "Retired physician living in Miami. Prefers a conservative portfolio focused on capital preservation.",
+      "social_links": []
+    },
+    {
+      "key": "wei_chen",
+      "first_name": "Wei",
+      "last_name": "Chen",
+      "email": "wei.chen@chencapital.io",
+      "description": "Tech founder who recently sold a software startup. Needs help deploying the proceeds after a liquidity event.",
+      "social_links": ["https://twitter.com/weichen_builds", "https://github.com/weichen"]
+    },
+    {
+      "key": "aisha_khan",
+      "first_name": "Aisha",
+      "last_name": "Khan",
+      "email": "aisha.khan@outlook.com",
+      "description": "Real estate investor with several rental properties in London.",
+      "social_links": ["https://www.linkedin.com/in/aishakhan"]
+    },
+    {
+      "key": "oliver_smith",
+      "first_name": "Oliver",
+      "last_name": "Smith",
+      "email": "oliver@smithfamilyoffice.com",
+      "description": "Head of a single-family office managing multi-generational wealth and several family trusts.",
+      "social_links": []
+    },
+    {
+      "key": "emma_johnson",
+      "first_name": "Emma",
+      "last_name": "Johnson",
+      "email": "emma.j@neviswealth.com",
+      "description": "Internal test account used by the advisory team.",
+      "social_links": []
+    }
+  ],
+  "documents": [
+    {
+      "key": "utility_bill",
+      "client": "maria_garcia",
+      "title": "Electricity bill - March 2026",
+      "content": "Florida Power & Light monthly statement for account 4471-2290. Service address: 1450 Brickell Avenue, Apt 2304, Miami, FL 33131. Billing period: February 12 to March 13, 2026. Total electricity usage was 812 kWh, compared with 744 kWh in the same period last year. Amount due: $143.27, payable by April 2, 2026. Customer name: Maria Garcia. Thank you for enrolling in paperless billing and automatic payments."
+    },
+    {
+      "key": "lease_agreement",
+      "client": "aisha_khan",
+      "title": "Residential tenancy agreement",
+      "content": "This assured shorthold tenancy agreement is made between Kensington Lettings Ltd (the landlord) and Aisha Khan (the tenant). The tenant will occupy the flat at 18 Pembridge Gardens, London W2 4DU. The term is twelve months starting 1 June 2025. Monthly rent is GBP 2,350, payable in advance on the first day of each month. A deposit of GBP 2,700 is protected with the Deposit Protection Service. The tenant agrees to keep the property in good condition."
+    },
+    {
+      "key": "passport",
+      "client": "john_doe",
+      "title": "Passport copy",
+      "content": "United States of America passport. Surname: Doe. Given names: John Michael. Nationality: USA. Date of birth: 14 May 1978. Place of birth: Boston, Massachusetts. Passport number: 548812331. Date of issue: 9 January 2020. Date of expiry: 8 January 2030. Issuing authority: United States Department of State. Copy certified by the compliance team on 3 February 2026."
+    },
+    {
+      "key": "drivers_license",
+      "client": "wei_chen",
+      "title": "Driver license scan",
+      "content": "State of California driver license, class C. License number: D4402183. Name: Wei Chen. Date of birth: 22 August 1989. Expires: 22 August 2029. Height 5-09, eyes brown. Restrictions: corrective lenses. The scan is clear and the photo matches the client in person."
+    },
+    {
+      "key": "payslip",
+      "client": "john_doe",
+      "title": "Payslip January 2026",
+      "content": "Employer: Harbor & Grant Consulting LLP. Employee: John Doe, Senior Partner. Pay period: January 1 to January 31, 2026. Gross salary: $41,666.67. Federal tax withheld: $11,250.00. Social security and Medicare: $3,187.50. 401(k) contribution: $1,916.67. Net pay deposited to checking account: $25,312.50. Year-to-date gross earnings: $41,666.67."
+    },
+    {
+      "key": "tax_return",
+      "client": "maria_garcia",
+      "title": "Form 1040 - tax year 2025",
+      "content": "U.S. Individual Income Tax Return for tax year 2025, filing status single. Wages were zero as the taxpayer is retired. Pension and annuity distributions totaled $96,400. Taxable interest was $8,210 and qualified dividends were $14,950. Adjusted gross income: $119,560. Standard deduction applied. Total tax: $18,904. The return was prepared by a certified public accountant and e-filed on March 30, 2026."
+    },
+    {
+      "key": "bank_statement",
+      "client": "wei_chen",
+      "title": "Checking account statement - February 2026",
+      "content": "First Republic checking account ending 0912. Opening balance on February 1: $2,148,330.12. Incoming wire on February 6 from Escrow Services Inc: $18,500,000.00, reference SALE OF SHARES ACME AI. Outgoing transfers: $35,000.00 to a personal savings account. Card and other debits: $12,418.77. Closing balance on February 28: $20,600,911.35. No overdraft fees were charged this period."
+    },
+    {
+      "key": "brokerage_statement",
+      "client": "john_doe",
+      "title": "Brokerage account statement Q4 2025",
+      "content": "Quarterly statement for individual brokerage account at Fidelity. Total account value: $3,482,190 as of December 31, 2025. Holdings include Vanguard Total Stock Market ETF (VTI) 4,200 shares, iShares Core MSCI EAFE ETF (IEFA) 6,800 shares, Apple Inc. 1,150 shares and Microsoft Corp. 900 shares. Unrealized gains for the quarter were $211,400. Dividends received: $18,320. Asset mix is 82% equities and 18% bonds."
+    },
+    {
+      "key": "risk_questionnaire",
+      "client": "maria_garcia",
+      "title": "Investor questionnaire results",
+      "content": "The client completed the investor questionnaire on January 15, 2026. She indicated that she would sell investments if the portfolio dropped more than 10% in a year. Her primary goal is preserving capital and generating stable income. Her investment horizon is 5 to 10 years. Experience with derivatives or leveraged products: none. Resulting classification: conservative, score 3 out of 10."
+    },
+    {
+      "key": "trust_deed",
+      "client": "oliver_smith",
+      "title": "Smith Family Irrevocable Trust",
+      "content": "This deed establishes the Smith Family Irrevocable Trust under the laws of Delaware. The settlor is Oliver Smith. The trustees are Northern Trust Company and Eleanor Smith. Beneficiaries are the settlor's children and grandchildren. Distributions may be made for health, education, maintenance and support. The trust holds a diversified portfolio and a 40% interest in Smith Holdings LLC. The trust is intended to minimize transfer taxes across generations."
+    },
+    {
+      "key": "will",
+      "client": "oliver_smith",
+      "title": "Last will and testament",
+      "content": "I, Oliver James Smith, declare this to be my last will and testament and revoke all prior wills. I appoint my spouse, Eleanor Smith, as executor. I leave my residence and personal effects to my spouse. The residue of my property shall pass to the Smith Family Irrevocable Trust. If my spouse does not survive me, my brother Henry Smith shall serve as guardian of any minor children. Signed in the presence of two witnesses on 2 March 2024."
+    },
+    {
+      "key": "mortgage_statement",
+      "client": "aisha_khan",
+      "title": "Mortgage statement - buy-to-let property",
+      "content": "Barclays buy-to-let mortgage for 7 Elgin Crescent, London W11. Outstanding principal: GBP 612,400. Interest rate: 4.29% fixed until September 2027. Monthly repayment: GBP 3,085, interest only. Remaining term: 21 years. Loan-to-value ratio: 58% based on the latest valuation. No arrears are recorded on this account."
+    },
+    {
+      "key": "life_insurance",
+      "client": "john_doe",
+      "title": "Term life policy schedule",
+      "content": "Policy number TL-7781902 issued by Prudential. Insured person: John Doe. Policy type: 20-year level term. Death benefit: $5,000,000 payable to the named beneficiaries, Sarah Doe (60%) and the Doe Children's Trust (40%). Annual premium: $4,380. Policy start date: 1 April 2021. Premiums are paid by automatic bank draft."
+    },
+    {
+      "key": "retirement_meeting_notes",
+      "client": "maria_garcia",
+      "title": "Advisor meeting notes - 12 Feb 2026",
+      "content": "Met with Maria to review her income plan. She wants to keep annual spending around $110,000 and travel twice a year. Her pension covers about 60% of spending; the rest comes from portfolio withdrawals. We discussed delaying Social Security benefits to age 70 to maximize lifetime payments. She asked about required minimum distributions from her IRA starting next year. Action items: model withdrawal scenarios and review long-term care options."
+    },
+    {
+      "key": "source_of_wealth",
+      "client": "wei_chen",
+      "title": "Source of wealth declaration",
+      "content": "The client declares that the majority of their wealth originates from the sale of Acme AI Inc., a software company they co-founded in 2018. The acquisition by a public technology company closed in January 2026. The client's share of proceeds was approximately $18.5 million after taxes and fees. Supporting evidence includes the share purchase agreement and the escrow release letter. Remaining wealth comes from salary savings and vested stock options."
+    },
+    {
+      "key": "investment_policy",
+      "client": "oliver_smith",
+      "title": "Investment policy statement",
+      "content": "This statement defines the objectives and constraints for the Smith family portfolio. The strategic mix is 55% global equities, 25% fixed income, 10% private equity and 10% real assets. The portfolio is rebalanced when any sleeve drifts more than 5 percentage points from target. Liquidity needs are modest, with expected annual distributions of 3%. Investments in tobacco and weapons manufacturers are excluded. Performance is benchmarked against a blended index and reviewed quarterly."
+    }
+  ]
+}

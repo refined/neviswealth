@@ -1,0 +1,32 @@
+{
+  "eval_queries": [
+    {"q": "address proof", "expected": ["utility_bill", "lease_agreement"]},
+    {"q": "identity document", "expected": ["passport", "drivers_license"]},
+    {"q": "proof of income", "expected": ["payslip", "tax_return"]},
+    {"q": "estate planning", "expected": ["trust_deed", "will"]},
+    {"q": "risk appetite", "expected": ["risk_questionnaire"]},
+    {"q": "home loan", "expected": ["mortgage_statement"]},
+    {"q": "stock holdings", "expected": ["brokerage_statement"]},
+    {"q": "retirement planning", "expected": ["retirement_meeting_notes"]},
+    {"q": "source of funds", "expected": ["source_of_wealth", "bank_statement"]},
+    {"q": "life cover", "expected": ["life_insurance"]},
+    {"q": "asset allocation", "expected": ["investment_policy", "brokerage_statement"]},
+    {"q": "residence verification", "expected": ["utility_bill", "lease_agreement"], "held_out": true},
+    {"q": "salary evidence", "expected": ["payslip"], "held_out": true},
+    {"q": "inheritance documents", "expected": ["will", "trust_deed"], "held_out": true},
+    {"q": "insurance payout on death", "expected": ["life_insurance"], "held_out": true},
+    {"q": "rental contract", "expected": ["lease_agreement"], "held_out": true},
+    {"q": "where did the money come from", "expected": ["source_of_wealth"], "held_out": true},
+    {"q": "monthly electricity usage", "expected": ["utility_bill"], "held_out": true},
+    {"q": "client wants low volatility", "expected": ["risk_questionnaire"], "held_out": true},
+    {"q": "social security timing", "expected": ["retirement_meeting_notes"], "held_out": true},
+    {"q": "KYC identification", "expected": ["passport", "drivers_license"], "held_out": true,
+     "known_miss": "'KYC' is unknown to the small model: similarity to the identity type (0.29) is within the noise band of unrelated short queries (up to ~0.32), below the 0.40 taxonomy threshold"}
+  ],
+  "negative_queries": [
+    "qwertyzxcv",
+    "chocolate cake recipe",
+    "football match results",
+    "how to fix a flat bicycle tire"
+  ]
+}

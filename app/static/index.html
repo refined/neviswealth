@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nevis Search</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/search">Nevis Search</a>
+    <nav>
+      <a href="#/search" data-nav="search">Search</a>
+      <a href="#/clients" data-nav="clients">Clients</a>
+      <a href="/docs" target="_blank" rel="noopener">API docs</a>
+    </nav>
+    <label class="api-key">
+      <span>API key</span>
+      <input id="api-key" type="password" placeholder="optional" autocomplete="off">
+    </label>
+  </header>
+  <main id="view" aria-live="polite"></main>
+  <script src="app.js"></script>
+</body>
+</html>
