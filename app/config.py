@@ -15,6 +15,8 @@ class Settings:
     variable with the upper-cased name, e.g. `database_url` from `DATABASE_URL`."""
 
     database_url: str = "postgresql://nevis:nevis@localhost:5432/nevis"
+    # Where clients reach the service; only used for log messages (compose sets it from APP_PORT).
+    public_url: str = "http://localhost:8000"
 
     # Embeddings. `hashing` selects a dependency-free deterministic embedder (tests / offline).
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"

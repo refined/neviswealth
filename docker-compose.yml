@@ -21,10 +21,13 @@ services:
     build: .
     environment:
       DATABASE_URL: postgresql://nevis:nevis@db:5432/nevis
+      PUBLIC_URL: http://localhost:${APP_PORT:-8000}
       # Set API_KEY (e.g. in .env) to require an X-API-Key header on every API call.
       API_KEY: ${API_KEY:-}
     ports:
-      - "8000:8000"
+      # Host port: set APP_PORT in .env (see .env.example) if 8000 is taken.
+      # Inside the container the app always listens on 8000.
+      - "${APP_PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy

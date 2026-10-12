@@ -1,7 +1,9 @@
 import uuid
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
+from fastapi import Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints
 
 DocumentStatusLiteral = Literal["pending", "processing", "ready", "failed"]
@@ -163,3 +165,10 @@ class Health(BaseModel):
     database: Literal["ok"]
     embedding_model: str
     worker_running: bool
+
+
+class NoCacheStaticFiles(StaticFiles):
+    def file_response(self, *args: Any, **kwargs: Any) -> Response:
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response

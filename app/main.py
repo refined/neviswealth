@@ -2,11 +2,9 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Response, status
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.responses import RedirectResponse
-from fastapi.staticfiles import StaticFiles
 
 from app import schemas
 from app.api import clients, documents, search
@@ -15,12 +13,17 @@ from app.config import Settings, get_settings
 from app.indexing.embedder import Embedder, create_embedder
 from app.indexing.summarizer import ExtractiveSummarizer
 from app.indexing.worker import IndexingWorker
+from app.schemas import NoCacheStaticFiles
 from app.search.service import SearchService
 from app.search.taxonomy import TaxonomyMatcher
 from app.table.connection import create_pool
 from app.table.records import EMBEDDING_DIM
 
 STATIC_DIR = Path(__file__).parent / "static"
+DOCS_URL = "/api"  # Swagger UI
+OPENAPI_URL = "/api/openapi.json"
+
+log = logging.getLogger(__name__)
 
 DESCRIPTION = """
 Search across wealth-management clients and their documents.
@@ -32,15 +35,6 @@ Search across wealth-management clients and their documents.
 
 Errors use FastAPI's standard shape: `{"detail": ...}`.
 """
-
-
-class NoCacheStaticFiles(StaticFiles):
-    """Static UI files that browsers revalidate (ETag) on every load, so deploys show up."""
-
-    def file_response(self, *args: Any, **kwargs: Any) -> Response:
-        response = super().file_response(*args, **kwargs)
-        response.headers["Cache-Control"] = "no-cache"
-        return response
 
 
 def build_container(settings: Settings, embedder: Embedder | None = None) -> Container:
@@ -89,12 +83,21 @@ def create_app(settings: Settings | None = None, embedder: Embedder | None = Non
         container.pool.open(wait=True, timeout=30)
         if settings.run_worker:
             container.worker.start()
+        log.info(
+            "Nevis Search is up: UI %(url)s/ui  API docs %(url)s/api", {"url": settings.public_url}
+        )
         yield
         container.worker.stop()
         container.pool.close()
 
     app = FastAPI(
-        title="Nevis Search API", version="1.0.0", description=DESCRIPTION, lifespan=lifespan
+        title="Nevis Search API",
+        version="1.0.0",
+        description=DESCRIPTION,
+        lifespan=lifespan,
+        docs_url=DOCS_URL,
+        redoc_url=None,
+        openapi_url=OPENAPI_URL,
     )
     app.state.container = container
 
