@@ -62,3 +62,13 @@ def test_openapi_documents_the_search_hit_union(api: TestClient) -> None:
         "application/json"
     ]["schema"]["items"]
     assert search_items["discriminator"]["propertyName"] == "type"
+
+
+def test_search_parameters_in_openapi(api: TestClient) -> None:
+    params = {
+        p["name"]: p
+        for p in api.get("/api/openapi.json").json()["paths"]["/search"]["get"]["parameters"]
+    }
+    assert set(params) == {"q", "type", "limit"}
+    assert params["q"]["required"] is True
+    assert not params["type"].get("required", False)

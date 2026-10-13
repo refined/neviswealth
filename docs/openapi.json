@@ -460,6 +460,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
               "maxLength": 256,
               "description": "Free text: a name, an email or part of it, or what a document is about.",
               "examples": [
@@ -477,11 +478,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "enum": [
-                    "client",
-                    "document"
-                  ],
-                  "type": "string"
+                  "$ref": "#/components/schemas/ResultType"
                 },
                 {
                   "type": "null"
@@ -1096,6 +1093,14 @@
           "weights"
         ],
         "title": "Lexeme"
+      },
+      "ResultType": {
+        "type": "string",
+        "enum": [
+          "client",
+          "document"
+        ],
+        "title": "ResultType"
       },
       "ValidationError": {
         "properties": {

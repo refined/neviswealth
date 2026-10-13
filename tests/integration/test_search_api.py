@@ -156,3 +156,18 @@ def test_api_key_protects_endpoints_when_configured(database_url: str) -> None:
             == 200
         )
         assert api.get("/health").status_code == 200  # health stays public
+
+
+def test_search_service_works_without_http(app, make_client) -> None:
+    # The business layer takes typed, already-validated input and opens its own connection.
+    from app.services.search import ResultType, SearchRequest
+
+    john = make_client(email="john.doe@neviswealth.com")
+    request = SearchRequest(query="neviswealth", types=frozenset({ResultType.CLIENT}), limit=5)
+    hits = app.state.container.search.search(request)
+    assert [(h.type, str(h.client.id)) for h in hits] == [("client", john["id"])]
+
+
+def test_search_type_must_be_a_known_value(api: TestClient) -> None:
+    for bad in ("Client", "invoice", ""):
+        assert api.get("/search", params={"q": "x", "type": bad}).status_code == 422

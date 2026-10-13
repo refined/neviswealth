@@ -1,9 +1,12 @@
 import difflib
+import enum
 import html
 import uuid
 from collections import defaultdict
+from dataclasses import dataclass
 
 from psycopg import Connection
+from psycopg_pool import ConnectionPool
 
 from app import schemas
 from app.indexing.embedder import Embedder
@@ -36,6 +39,18 @@ _HEADLINE_OPTIONS = (
 )
 
 
+class ResultType(enum.StrEnum):
+    CLIENT = "client"
+    DOCUMENT = "document"
+
+
+@dataclass(frozen=True)
+class SearchRequest:
+    query: str  # already stripped and non-empty
+    types: frozenset[ResultType]
+    limit: int
+
+
 def _mark(value: str, needle: str) -> str:
     """HTML-escape `value` and wrap the first case-insensitive occurrence of `needle`."""
     start = value.casefold().find(needle)
@@ -55,6 +70,7 @@ def _render_headline(snippet: str) -> str:
 class SearchService:
     def __init__(
         self,
+        pool: ConnectionPool,
         embedder: Embedder,
         taxonomy: TaxonomyMatcher,
         *,
@@ -62,26 +78,26 @@ class SearchService:
         taxonomy_min_similarity: float,
         semantic_candidate_chunks: int = 50,
     ) -> None:
+        self._pool = pool
         self.embedder = embedder
         self.taxonomy = taxonomy
         self.semantic_min_similarity = semantic_min_similarity
         self.taxonomy_min_similarity = taxonomy_min_similarity
         self.semantic_candidate_chunks = semantic_candidate_chunks
 
-    def search(
-        self, conn: Connection, query: str, kinds: set[str], limit: int
-    ) -> list[schemas.ClientHit | schemas.DocumentHit]:
+    def search(self, request: SearchRequest) -> list[schemas.ClientHit | schemas.DocumentHit]:
         hits: list[schemas.ClientHit | schemas.DocumentHit] = []
-        if "client" in kinds:
-            hits.extend(self.search_clients(conn, query, limit))
-        if "document" in kinds:
-            hits.extend(self.search_documents(conn, query, limit))
+        with self._pool.connection() as conn:
+            if ResultType.CLIENT in request.types:
+                hits.extend(self._search_clients(conn, request.query, request.limit))
+            if ResultType.DOCUMENT in request.types:
+                hits.extend(self._search_documents(conn, request.query, request.limit))
         hits.sort(key=lambda h: (-h.score, h.type))
-        return hits[:limit]
+        return hits[: request.limit]
 
     # -- clients ---------------------------------------------------------------------------
 
-    def search_clients(self, conn: Connection, query: str, limit: int) -> list[schemas.ClientHit]:
+    def _search_clients(self, conn: Connection, query: str, limit: int) -> list[schemas.ClientHit]:
         q = normalize(query)
         fuzzy = len(q) >= FUZZY_MIN_QUERY_LENGTH
         matches = clients.client_matches(
@@ -144,7 +160,7 @@ class SearchService:
 
     # -- documents -------------------------------------------------------------------------
 
-    def search_documents(
+    def _search_documents(
         self, conn: Connection, query: str, limit: int
     ) -> list[schemas.DocumentHit]:
         signals: dict[uuid.UUID, DocumentSignals] = defaultdict(DocumentSignals)

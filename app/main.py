@@ -6,12 +6,16 @@ from fastapi import Depends, FastAPI
 
 from app.api import clients, documents, health, search, ui
 from app.api.deps import Container, require_api_key
+from app.api.errors import register_error_handlers
 from app.config import Settings, get_settings
 from app.indexing.embedder import Embedder, create_embedder
 from app.indexing.summarizer import ExtractiveSummarizer
 from app.indexing.worker import IndexingWorker
-from app.search.service import SearchService
 from app.search.taxonomy import TaxonomyMatcher
+from app.services.clients import ClientService
+from app.services.documents import DocumentService
+from app.services.health import HealthService
+from app.services.search import SearchService
 from app.table.connection import create_pool
 from app.table.records import EMBEDDING_DIM
 
@@ -48,6 +52,7 @@ def build_container(settings: Settings, embedder: Embedder | None = None) -> Con
         max_chars=settings.summary_max_chars,
     )
     search_service = SearchService(
+        pool,
         embedder,
         TaxonomyMatcher(embedder),
         semantic_min_similarity=settings.semantic_min_similarity,
@@ -63,7 +68,15 @@ def build_container(settings: Settings, embedder: Embedder | None = None) -> Con
         poll_interval_s=settings.worker_poll_interval_s,
         stale_after_s=settings.worker_stale_after_s,
     )
-    return Container(settings, pool, embedder, search_service, worker)
+    return Container(
+        settings=settings,
+        pool=pool,
+        worker=worker,
+        clients=ClientService(pool),
+        documents=DocumentService(pool, worker, embedding_model=embedder.model_name),
+        search=search_service,
+        health=HealthService(pool, embedder, worker),
+    )
 
 
 def create_app(settings: Settings | None = None, embedder: Embedder | None = None) -> FastAPI:
@@ -95,6 +108,7 @@ def create_app(settings: Settings | None = None, embedder: Embedder | None = Non
         openapi_url=OPENAPI_URL,
     )
     app.state.container = container
+    register_error_handlers(app)
 
     protected = [Depends(require_api_key)]
     app.include_router(clients.router, dependencies=protected)

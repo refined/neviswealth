@@ -58,6 +58,14 @@ uv run ruff check . && uv run ruff format --check .
 
 ## Conventions
 
+- **Layers** (each only calls the one below):
+  - `app/api/`: HTTP only. Validate input into typed values (Pydantic models, enums), call one
+    service, map domain errors (`app/errors.py`) to status codes. Endpoints get services through
+    the `*ServiceDep` aliases in `app/api/deps.py`, never a connection or the whole `Container`.
+  - `app/services/`: business operations. A service gets the connection pool in its constructor
+    and opens one connection (one transaction) per operation; it trusts its typed input and
+    raises domain errors, never `HTTPException`.
+  - `app/table/`: SQL only (see below); functions take the caller's connection.
 - **Database:**
   - The schema is defined only in SQL: `db/migrations/NNNN_name.sql`.
   - Migrations are forward-only. To change the schema, add a new numbered file; never edit an
