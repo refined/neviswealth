@@ -215,7 +215,7 @@ The embedding model is baked into the image at build time, so the container runs
 - **Port and API key.** Copy [.env.example](.env.example) to `.env`. Change `APP_PORT` if 8000 is
   taken; set `API_KEY` to require an `X-API-Key` header on every API call.
 - **Database client.** Postgres is reachable from this machine only:
-  `postgresql://nevis:nevis@localhost:5433/nevis`. Change the port with `DB_PORT`.
+  `postgresql://nevis:nevis@127.0.0.1:5433/nevis`. Change the port with `DB_PORT`.
 ### Stopping
 
 Run these from the project folder. They affect only this project's containers (Compose project

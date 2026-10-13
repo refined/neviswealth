@@ -79,16 +79,35 @@ def client_matches(
     word_similarity_threshold: float,
     limit: int,
 ) -> list[ClientMatch]:
-    # Threshold of the `<%` operator, local to the current transaction.
+    """Clients matching `query` in one of three ways; each way is served by an index.
+    Two Postgres features do the work.
+    1. The `pg_trgm` extension (enabled in db/migrations/0001_initial.sql;
+       https://www.postgresql.org/docs/17/pgtrgm.html) compares strings by their trigrams, the
+       overlapping 3-letter pieces of each word: `john` -> `  j`, ` jo`, `joh`, `ohn`, `hn `. It
+       adds:
+       - `word_similarity(q, text)`: the share of q's trigrams found in the most similar run of
+         `text`, from 0 to 1.
+       - `q <% text`: the same check as a condition, true when word_similarity >= the
+         `pg_trgm.word_similarity_threshold` setting. An operator can
+         use the GIN trigram index on `search_text`; so can `LIKE '%...%'`.
+    2. Built-in full-text search (https://www.postgresql.org/docs/17/textsearch-controls.html)
+       matches words, not substrings, for the free-text description:
+       - `clients.description_tsv` holds the description's word stems, kept up to date by Postgres.
+       - `websearch_to_tsquery('english', q)` turns user input into such stems and understands
+         search-engine syntax
+       - `tsv @@ tsquery` tests a match (GIN index); `ts_rank_cd(..., 32)` scores it in [0, 1).
+
+    The three ways (ORed; Postgres combines the three index scans with a BitmapOr):
+    - `search_text LIKE '%q%'`: `q` is part of a name, email or handle (`neviswealth`);
+    - `q <% search_text`: the same with typos (`jonh doe`); off for short queries (`fuzzy`);
+    - `description_tsv @@ tq`: the description contains the query's words (`retired physician`).
+    `query` must already be normalized (case-folded) like `search_text`. The raw signals
+    (`word_similarity`, `description_rank`) are returned for scoring in app/search/scoring.py.
+    """
     conn.execute(
         "SELECT set_config('pg_trgm.word_similarity_threshold', %s, true)",
         (str(word_similarity_threshold),),
     )
-    # Three ways to match, all index-backed:
-    #  - LIKE '%q%': `q` is a substring of the identity terms (trigram index);
-    #  - `q <% search_text`: word_similarity >= threshold, i.e. most of q's 3-letter chunks
-    #    (trigrams) appear in some word run of search_text: tolerates typos (trigram index);
-    #  - description full-text match, ranked by ts_rank_cd scaled to [0, 1) (GIN tsvector index).
     with conn.cursor(row_factory=class_row(ClientMatch)) as cur:
         cur.execute(
             r"""
