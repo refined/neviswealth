@@ -25,7 +25,7 @@ from app.search.scoring import (
 )
 from app.search.taxonomy import DocumentType, TaxonomyMatcher
 from app.table import clients, documents
-from app.table.records import ClientMatch
+from app.table.records import ClientMatch, DocumentRecord
 
 # Candidates fetched per retrieval channel before fusion.
 _CANDIDATES = 100
@@ -197,7 +197,7 @@ class SearchService:
             return []
 
         found = {d.id: d for d in documents.get_documents(conn, [i for _, i, _ in scored])}
-        highlights = self._document_highlights(conn, query, scored)
+        highlights = self._document_highlights(conn, query, scored, found)
 
         hits = []
         for score, doc_id, sig in scored:
@@ -231,38 +231,28 @@ class SearchService:
         conn: Connection,
         query: str,
         scored: list[tuple[float, uuid.UUID, DocumentSignals]],
+        found: dict[uuid.UUID, DocumentRecord],
     ) -> dict[uuid.UUID, str]:
-        """Snippet per document from the strongest evidence: query terms, type terms or chunk."""
-        lexical_ids = [doc_id for _, doc_id, s in scored if s.lexical_rank is not None]
-        by_type: dict[DocumentType, list[uuid.UUID]] = defaultdict(list)
-        for _, doc_id, s in scored:
-            if s.lexical_rank is None and s.taxonomy is not None:
-                by_type[s.taxonomy.type].append(doc_id)
-
-        strip = _MARK_START + _MARK_END
-        headlines: dict[uuid.UUID, str] = {}
-        if lexical_ids:
-            headlines.update(
-                documents.query_headlines(
-                    conn, lexical_ids, query, options=_HEADLINE_OPTIONS, strip_chars=strip
-                )
-            )
-        for doc_type, ids in by_type.items():
-            headlines.update(
-                documents.phrase_headlines(
-                    conn, ids, doc_type.all_phrases, options=_HEADLINE_OPTIONS, strip_chars=strip
-                )
-            )
-
-        # Prefer a headline that marks matches in the content; when the match was only in the
-        # title (or by meaning), the best-matching chunk says more than the content's first words.
+        """Snippet per document: its matched words, else the best-matching chunk, else its start."""
+        word_ids = [d for _, d, s in scored if s.lexical_rank is not None or s.taxonomy is not None]
+        phrases = sorted(
+            {p for _, _, s in scored if s.taxonomy for p in s.taxonomy.type.all_phrases}
+        )
+        marked = documents.headlines(
+            conn,
+            word_ids,
+            query,
+            phrases,
+            options=_HEADLINE_OPTIONS,
+            strip_chars=_MARK_START + _MARK_END,
+        )
         highlights: dict[uuid.UUID, str] = {}
         for _, doc_id, s in scored:
-            headline = headlines.get(doc_id)
-            if headline and _MARK_START in headline:
+            headline = marked.get(doc_id, "")
+            if _MARK_START in headline:
                 highlights[doc_id] = _render_headline(headline)
             elif s.best_chunk:
                 highlights[doc_id] = html.escape(truncate(s.best_chunk, 240))
-            elif headline:
-                highlights[doc_id] = _render_headline(headline)
+            elif doc_id in found:
+                highlights[doc_id] = html.escape(truncate(found[doc_id].content, 240))
         return highlights

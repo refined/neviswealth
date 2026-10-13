@@ -93,6 +93,8 @@ def client_matches(
     2. Built-in full-text search (https://www.postgresql.org/docs/17/textsearch-controls.html)
        matches words, not substrings, for the free-text description:
        - `clients.description_tsv` holds the description's word stems, kept up to date by Postgres.
+       - A `tsquery` is the search side of that pair: stems joined by operators, `&` (and),
+         `|` (or), `!` (not), `<->` (followed by), e.g. `'retir' & 'physician'`.
        - `websearch_to_tsquery('english', q)` turns user input into such stems and understands
          search-engine syntax
        - `tsv @@ tsquery` tests a match (GIN index); `ts_rank_cd(..., 32)` scores it in [0, 1).

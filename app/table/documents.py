@@ -213,6 +213,8 @@ def record_failure(conn: Connection, job: Job, *, status: DocumentStatus, error:
 
 
 def lexical_matches(conn: Connection, query: str, *, limit: int) -> list[LexicalMatch]:
+    # `tsv @@ tsquery`: does the document's word index (tsvector) satisfy the search query
+    # (tsquery: stems with & | ! <-> operators, e.g. 'electr' & 'usag')?
     # websearch_to_tsquery: Google-like syntax ("quotes", OR, -minus); words are stemmed, so
     # "bills" matches "bill". ts_rank_cd scores how many query terms occur and how close together;
     # title terms carry weight A (1.0) vs B (0.4) for content. Normalization 32 maps the rank to
@@ -277,41 +279,32 @@ def documents_with_phrases(
     return {row[0] for row in rows}
 
 
-def query_headlines(
-    conn: Connection, ids: list[uuid.UUID], query: str, *, options: str, strip_chars: str
+def headlines(
+    conn: Connection,
+    ids: list[uuid.UUID],
+    query: str,
+    phrases: list[str],
+    *,
+    options: str,
+    strip_chars: str,
 ) -> dict[uuid.UUID, str]:
+    # One tsquery for everything that may have matched: the user's query OR any of the phrases
+    # combined with tsquery_or_agg.
     # ts_headline picks the content fragments with the most matches and wraps each match in the
     # marker characters from `options`; `strip_chars` removes those markers from the content first
     # so only real matches carry them.
     rows = conn.execute(
         """
         SELECT d.id,
-               ts_headline('english', translate(d.content, %(strip)s, ''), tq, %(options)s)
-        FROM documents d, websearch_to_tsquery('english', %(q)s) AS tq
-        WHERE d.id = ANY(%(ids)s)
-        """,
-        {"q": query, "ids": ids, "options": options, "strip": strip_chars},
-    )
-    return {row[0]: row[1] for row in rows}
-
-
-def phrase_headlines(
-    conn: Connection,
-    ids: list[uuid.UUID],
-    phrases: tuple[str, ...],
-    *,
-    options: str,
-    strip_chars: str,
-) -> dict[uuid.UUID, str]:
-    rows = conn.execute(
-        """
-        SELECT d.id,
                ts_headline('english', translate(d.content, %(strip)s, ''), x.tq, %(options)s)
         FROM documents d,
-             (SELECT tsquery_or_agg(phraseto_tsquery('english', p)) AS tq
-              FROM unnest(%(phrases)s::text[]) AS p) AS x
+             (SELECT tsquery_or_agg(t) AS tq
+              FROM (SELECT websearch_to_tsquery('english', %(q)s) AS t
+                    UNION ALL
+                    SELECT phraseto_tsquery('english', p) FROM unnest(%(phrases)s::text[]) AS p
+                   ) AS parts) AS x
         WHERE d.id = ANY(%(ids)s)
         """,
-        {"phrases": list(phrases), "ids": ids, "options": options, "strip": strip_chars},
+        {"q": query, "phrases": phrases, "ids": ids, "options": options, "strip": strip_chars},
     )
     return {row[0]: row[1] for row in rows}
