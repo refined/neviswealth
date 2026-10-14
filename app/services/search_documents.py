@@ -5,7 +5,7 @@ from collections import defaultdict
 import numpy as np
 from psycopg import Connection
 
-from app import schemas
+from app import schemas, table
 from app.indexing.embedder import Embedder
 from app.indexing.summarizer import truncate
 from app.search.scoring import (
@@ -15,7 +15,6 @@ from app.search.scoring import (
     score_document,
 )
 from app.search.taxonomy import TaxonomyMatcher, TypeMatch
-from app.table import documents
 from app.table.records import DocumentRecord
 
 # Candidates fetched per retrieval channel before scoring.
@@ -67,7 +66,7 @@ class DocumentSearch:
         if not scored:
             return []
 
-        found = {d.id: d for d in documents.get_documents(conn, [i for _, i, _ in scored])}
+        found = {d.id: d for d in table.documents.get_documents(conn, [i for _, i, _ in scored])}
         highlights = self._document_highlights(conn, query, scored, found)
         hits = []
         for score, doc_id, sig in scored:
@@ -88,7 +87,7 @@ class DocumentSearch:
         self, conn: Connection, query: str, signals: dict[uuid.UUID, DocumentSignals]
     ) -> None:
         # Full-text: the inverted index over title (weight A) and content (weight B).
-        for match in documents.lexical_matches(conn, query, limit=_CANDIDATES):
+        for match in table.documents.lexical_matches(conn, query, limit=_CANDIDATES):
             signals[match.id].lexical_rank = match.rank
             signals[match.id].in_title = match.in_title
 
@@ -100,7 +99,7 @@ class DocumentSearch:
     ) -> None:
         # Embeddings: the chunks nearest to the (blended) query vector (HNSW index), best chunk
         # per document.
-        for nearest in documents.nearest_documents(
+        for nearest in table.documents.nearest_documents(
             conn, query_vector, chunk_limit=self.semantic_candidate_chunks
         ):
             signals[nearest.document_id].semantic = nearest.similarity
@@ -115,7 +114,7 @@ class DocumentSearch:
         # Documents that contain one of the matched type's phrases ("utility bill", "lease
         # agreement", ...) get the type signal.
         for type_match in type_matches:
-            ids = documents.documents_with_phrases(
+            ids = table.documents.documents_with_phrases(
                 conn, type_match.type.all_phrases, limit=_CANDIDATES
             )
             for doc_id in ids:
@@ -147,7 +146,7 @@ class DocumentSearch:
         phrases = sorted(
             {p for _, _, s in scored if s.taxonomy for p in s.taxonomy.type.all_phrases}
         )
-        marked = documents.headlines(
+        marked = table.documents.headlines(
             conn,
             word_ids,
             query,

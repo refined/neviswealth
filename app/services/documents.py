@@ -3,9 +3,9 @@ from dataclasses import dataclass
 
 from psycopg_pool import ConnectionPool
 
+from app import table
 from app.errors import NotFoundError
 from app.indexing.worker import IndexingWorker
-from app.table import clients, documents
 from app.table.records import ChunkRecord, DocumentRecord, LexemeRecord
 
 
@@ -29,9 +29,9 @@ class DocumentService:
         # Postgres fills the full-text index in this transaction; chunks, embeddings and the
         # summary are produced afterwards by the indexing worker.
         with self._pool.connection() as conn:
-            if clients.get_client(conn, client_id) is None:
+            if table.clients.get_client(conn, client_id) is None:
                 raise NotFoundError("Client")
-            document = documents.insert_document(
+            document = table.documents.insert_document(
                 conn, client_id=client_id, title=title, content=content
             )
         # Committed when the `with` block exited, so the worker can see the new row.
@@ -40,32 +40,32 @@ class DocumentService:
 
     def get(self, document_id: uuid.UUID) -> DocumentRecord:
         with self._pool.connection() as conn:
-            document = documents.get_document(conn, document_id)
+            document = table.documents.get_document(conn, document_id)
         if document is None:
             raise NotFoundError("Document")
         return document
 
     def list_for_client(self, client_id: uuid.UUID) -> list[DocumentRecord]:
         with self._pool.connection() as conn:
-            if clients.get_client(conn, client_id) is None:
+            if table.clients.get_client(conn, client_id) is None:
                 raise NotFoundError("Client")
-            return documents.list_client_documents(conn, client_id)
+            return table.documents.list_client_documents(conn, client_id)
 
     def index(self, document_id: uuid.UUID) -> DocumentIndexInfo:
         with self._pool.connection() as conn:
-            document = documents.get_document(conn, document_id)
+            document = table.documents.get_document(conn, document_id)
             if document is None:
                 raise NotFoundError("Document")
             return DocumentIndexInfo(
                 document=document,
-                chunks=documents.list_chunks(conn, document_id),
-                lexemes=documents.top_lexemes(conn, document_id),
+                chunks=table.documents.list_chunks(conn, document_id),
+                lexemes=table.documents.top_lexemes(conn, document_id),
                 embedding_model=self._embedding_model,
             )
 
     def reprocess(self, document_id: uuid.UUID) -> DocumentRecord:
         with self._pool.connection() as conn:
-            document = documents.requeue_document(conn, document_id)
+            document = table.documents.requeue_document(conn, document_id)
         if document is None:
             raise NotFoundError("Document")
         self._worker.notify()

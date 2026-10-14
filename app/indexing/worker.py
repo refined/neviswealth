@@ -11,10 +11,10 @@ import time
 
 from psycopg_pool import ConnectionPool
 
+from app import table
 from app.indexing.embedder import Embedder
 from app.indexing.pipeline import IndexedDocument, index_document
 from app.indexing.summarizer import Summarizer
-from app.table import documents
 from app.table.records import DocumentStatus, Job
 
 log = logging.getLogger(__name__)
@@ -94,7 +94,7 @@ class IndexingWorker:
 
     def _claim(self) -> Job | None:
         with self._pool.connection() as conn:
-            return documents.claim_next_document(
+            return table.documents.claim_next_document(
                 conn, stale_after_s=self._stale_after_s, max_attempts=self._max_attempts
             )
 
@@ -112,7 +112,7 @@ class IndexingWorker:
 
     def _save(self, job: Job, result: IndexedDocument, elapsed_ms: int) -> None:
         with self._pool.connection() as conn:
-            saved = documents.save_index_result(
+            saved = table.documents.save_index_result(
                 conn, job, summary=result.summary, chunks=result.chunks, processing_ms=elapsed_ms
             )
         if saved:
@@ -127,7 +127,7 @@ class IndexingWorker:
         status = DocumentStatus.FAILED if final else DocumentStatus.PENDING
         try:
             with self._pool.connection() as conn:
-                documents.record_failure(
+                table.documents.record_failure(
                     conn, job, status=status, error=f"{type(exc).__name__}: {exc}"[:2000]
                 )
         except Exception:

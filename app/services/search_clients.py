@@ -3,7 +3,7 @@ import html
 
 from psycopg import Connection
 
-from app import schemas
+from app import schemas, table
 from app.indexing.text import client_field_terms, normalize
 from app.search.scoring import (
     FUZZY_MIN_QUERY_LENGTH,
@@ -11,7 +11,6 @@ from app.search.scoring import (
     ClientSignals,
     score_client,
 )
-from app.table import clients
 from app.table.records import ClientMatch
 
 # Candidates fetched from the database before scoring.
@@ -34,7 +33,7 @@ class ClientSearch:
     def search(self, conn: Connection, query: str, limit: int) -> list[schemas.ClientHit]:
         q = normalize(query)
         fuzzy = len(q) >= FUZZY_MIN_QUERY_LENGTH
-        matches = clients.client_matches(
+        matches = table.clients.client_matches(
             conn,
             q,
             fuzzy=fuzzy,

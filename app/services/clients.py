@@ -3,9 +3,9 @@ import uuid
 from psycopg.errors import UniqueViolation
 from psycopg_pool import ConnectionPool
 
+from app import table
 from app.errors import DuplicateEmailError, NotFoundError
 from app.indexing.text import build_client_search_text
-from app.table import clients
 from app.table.records import ClientRecord
 
 
@@ -24,7 +24,7 @@ class ClientService:
     ) -> ClientRecord:
         try:
             with self._pool.connection() as conn:
-                return clients.insert_client(
+                return table.clients.insert_client(
                     conn,
                     first_name=first_name,
                     last_name=last_name,
@@ -41,11 +41,11 @@ class ClientService:
 
     def get(self, client_id: uuid.UUID) -> ClientRecord:
         with self._pool.connection() as conn:
-            client = clients.get_client(conn, client_id)
+            client = table.clients.get_client(conn, client_id)
         if client is None:
             raise NotFoundError("Client")
         return client
 
     def list(self, *, limit: int, offset: int) -> list[ClientRecord]:
         with self._pool.connection() as conn:
-            return clients.list_clients(conn, limit=limit, offset=offset)
+            return table.clients.list_clients(conn, limit=limit, offset=offset)
