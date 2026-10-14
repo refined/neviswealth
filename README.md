@@ -36,14 +36,54 @@ Supporting endpoints are `GET /clients`, `GET /clients/{id}`, `GET /clients/{id}
   writes a summary. This takes about 50 ms.
 - A search query only looks things up in those indexes and takes ~20-30 ms.
 
-```
-write:  POST /clients ───────────► clients     (+ word and trigram indexes)
-        POST /clients/{id}/documents ─► documents (+ word index, status: pending)
-                                          └─► background worker: chunks, vectors, summary → ready
+`GET /search` runs the client search and the document search and merges them into one list
+sorted by score. Each search has the same three steps: **find** candidates through indexes,
+**score** them from 0 to 1, **highlight** why they matched.
 
-read:   GET /search?q=… ─► clients:   substring · typo-tolerant · description words
-                        └► documents: words · meaning · document type
-                        ─► one list, each hit with a score, the reason it matched and a snippet
+**Clients:** everything happens synchronously, in the request.
+
+```
+WRITE  POST /clients                                           one transaction, no background work
+  name, email, social links ─► app: normalize, split into identity terms
+        John Doe, john.doe@neviswealth.com ─► john doe · john · doe · john.doe · neviswealth.com
+                                               · neviswealth · …
+                                  ─► clients.search_text           GIN trigram index
+  description ─► Postgres: clients.description_tsv (generated)     GIN full-text index
+  email ─► unique index on lower(email)                            duplicate → 409
+
+SEARCH  GET /search?q=…                                        app/services/search_clients.py
+  1. find       one SQL query, three conditions ORed:
+                  search_text LIKE '%q%'       part of a name/email/handle   NevisWealth
+                  q <% search_text             the same with a typo          Jonh Doe (≥ 4 chars)
+                  description_tsv @@ q         description words             retired physician
+  2. score      whole term 1.0 · part of a term 0.9 · typo ≤ 0.85 · description 0.55–0.75
+                combined with noisy-OR
+  3. highlight  the email / name / link with the query wrapped in <mark>
+```
+
+**Documents:** words are indexed synchronously; meaning and summary by a background worker.
+
+```
+WRITE  POST /clients/{id}/documents
+  sync, same transaction:
+        documents row, status = pending
+        title + content ─► Postgres: documents.tsv (generated;     GIN full-text index
+                           title words weigh more than content)
+  async, background worker (polls the documents table, ~50 ms per document):
+        content ─► sentences ─► chunks of ≤ 120 words
+                ─► "title. chunk" ─► model ─► document_chunks.embedding   HNSW vector index
+                ─► sentences ─► model ─► up to 3 central sentences ─► documents.summary
+        status = ready (or failed after 3 attempts)
+
+SEARCH  GET /search?q=…                                        app/services/search_documents.py
+  0. the query is embedded once and matched to a document type     address proof → proof of address
+  1. find       words    documents.tsv matches the query           GIN
+                meaning  chunks nearest to the query vector,       HNSW
+                         pulled towards the matched type
+                type     documents containing a phrase of the type GIN   "electricity bill"
+  2. score      each signal → a confidence; a document needs words, a type phrase or
+                meaning ≥ 0.22; confidences combined with noisy-OR
+  3. highlight  matched words marked by ts_headline; else the closest chunk; else the start
 ```
 
 You can use it through the **REST API**, the **Swagger UI** (`/api`) or a **simple web UI**
@@ -287,10 +327,11 @@ uv run ruff check . && uv run ruff format --check .
 ```
 app/                 application code
   api/               HTTP layer: input validation, endpoints, web UI, error mapping
-  services/          business operations; each opens its own database transaction
+  services/          business operations; each opens its own database transaction.
+                     search_clients.py / search_documents.py: find, score, highlight
   table/             database layer: all SQL queries, row types, migration runner
   indexing/          write path: text processing, embeddings, summaries, background worker
-  search/            search logic: document-type taxonomy and scoring
+  search/            document-type taxonomy and the shared noisy-OR formula
   static/            web UI (plain HTML + JavaScript, no build step)
 db/
   migrations/        database schema as numbered .sql files
@@ -304,8 +345,8 @@ tests/               unit, integration and search-quality tests
 
 - **English only:** the full-text configuration and the model are English.
 - **Plain-text documents only:** there is no PDF or OCR ingestion.
-- **Extractive summaries only.** An abstractive LLM summarizer could be plugged in behind the
-  `Summarizer` interface on a bigger server.
+- **Extractive summaries only.** An abstractive LLM summarizer could replace
+  `ExtractiveSummarizer` on a bigger server.
 - **The document-type taxonomy is hand-written.** It should grow from advisors' real document
   types.
 - **Client descriptions are matched by words only:** "retired doctor" will not find "retired
