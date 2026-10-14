@@ -11,7 +11,7 @@ _FALSE = {"0", "false", "no", "off", ""}
 
 @dataclass(frozen=True)
 class Settings:
-    database_url: str = "postgresql://nevis:nevis@localhost:5432/nevis"
+    database_url: str = "postgresql://advisor:advisor@localhost:5432/advisor"
     # Where clients reach the service; only used for log messages (compose sets it from APP_PORT).
     public_url: str = "http://localhost:8000"
 

@@ -13,7 +13,7 @@ def test_health(api: TestClient) -> None:
 def test_ui_is_served_and_revalidated(api: TestClient) -> None:
     response = api.get("/", follow_redirects=True)
     assert response.status_code == 200
-    assert "<title>Nevis Search</title>" in response.text
+    assert "<title>Advisor Search</title>" in response.text
     assert response.headers["cache-control"] == "no-cache"
     assert api.get("/ui/app.js").status_code == 200
 

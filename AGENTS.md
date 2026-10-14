@@ -4,8 +4,7 @@ Working rules for anyone (human or AI agent) contributing to this repository.
 
 ## Project
 
-Nevis Search API: a home assignment (see `Nevis - Backend Home Assignment.pdf`). It is a REST API for
-wealth advisors that lets them:
+Advisor Search API: a REST API for wealth advisors that lets them:
 - create clients and attach text documents to them;
 - search across clients (name, email, description) and documents (semantic + lexical);
 - get a short extractive summary of each document.

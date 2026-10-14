@@ -23,8 +23,8 @@ function sessionSet(key, value) {
   try { sessionStorage.setItem(key, value); } catch { /* storage may be unavailable */ }
 }
 
-apiKeyInput.value = storageGet("nevis-api-key") || "";
-apiKeyInput.addEventListener("change", () => storageSet("nevis-api-key", apiKeyInput.value.trim()));
+apiKeyInput.value = storageGet("advisor-api-key") || "";
+apiKeyInput.addEventListener("change", () => storageSet("advisor-api-key", apiKeyInput.value.trim()));
 
 class ApiError extends Error {
   constructor(status, body) {
@@ -92,7 +92,7 @@ function statusBadge(status) {
 
 // Navigation links shown above a page: back to the last search (if any) plus extra links.
 function breadcrumbs(...links) {
-  const lastSearch = sessionGet("nevis-last-search");
+  const lastSearch = sessionGet("advisor-last-search");
   const q = lastSearch ? new URLSearchParams(lastSearch.split("?")[1] || "").get("q") : null;
   const items = [lastSearch && h("a", { href: lastSearch }, `← Back to search “${q}”`), ...links]
     .filter(Boolean);
@@ -163,7 +163,7 @@ async function renderSearch(params) {
   const results = h("section");
   render(form, examples, results);
   if (!q) return;
-  sessionSet("nevis-last-search", location.hash);
+  sessionSet("advisor-last-search", location.hash);
 
   results.append(h("p", { class: "muted" }, "Searching…"));
   const query = new URLSearchParams({ q });

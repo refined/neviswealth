@@ -1,5 +1,5 @@
 [project]
-name = "nevis-search"
+name = "advisor-search"
 version = "0.1.0"
 description = "Search API across wealth-management clients and their documents"
 readme = "README.md"

@@ -2,9 +2,9 @@ services:
   db:
     image: pgvector/pgvector:pg17
     environment:
-      POSTGRES_USER: nevis
-      POSTGRES_PASSWORD: nevis
-      POSTGRES_DB: nevis
+      POSTGRES_USER: advisor
+      POSTGRES_PASSWORD: advisor
+      POSTGRES_DB: advisor
     # Sized for a small (1 vCPU / 4 GB) server.
     command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=30", "-c", "work_mem=8MB"]
     volumes:
@@ -13,7 +13,7 @@ services:
       # For a local DB client only (bound to localhost); 5433 avoids clashing with a local Postgres.
       - "127.0.0.1:${DB_PORT:-5433}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nevis -d nevis"]
+      test: ["CMD-SHELL", "pg_isready -U advisor -d advisor"]
       interval: 2s
       timeout: 3s
       retries: 30
@@ -23,7 +23,7 @@ services:
   app:
     build: .
     environment:
-      DATABASE_URL: postgresql://nevis:nevis@db:5432/nevis
+      DATABASE_URL: postgresql://advisor:advisor@db:5432/advisor
       PUBLIC_URL: http://localhost:${APP_PORT:-8000}
       # Set API_KEY (e.g. in .env) to require an X-API-Key header on every API call.
       API_KEY: ${API_KEY:-}

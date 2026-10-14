@@ -1,4 +1,4 @@
-# Nevis Search API reference
+# Advisor Search API reference
 
 - Base URL: `http://localhost:8000` by default (`APP_PORT` in `.env` changes the port).
 - Interactive docs: `/api` (Swagger UI); the spec is served at `/api/openapi.json`.

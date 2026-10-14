@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Nevis Search API",
+    "title": "Advisor Search API",
     "description": "\nSearch across wealth-management clients and their documents.\n\n* **Clients** are found by name, email (any part of it, e.g. the company domain), social links\n  and description.\n* **Documents** are found by their words *and* their meaning: `address proof` finds a utility bill.\n  Each document gets an extractive summary once background indexing finishes.\n\nErrors use FastAPI's standard shape: `{\"detail\": ...}`.\n",
     "version": "1.0.0"
   },

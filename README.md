@@ -1,19 +1,15 @@
-# Nevis Search
+# Advisor Search
 
-## The task
+## What it is
 
-Nevis builds a WealthTech platform for financial advisors, who need to find their clients and
-the clients' documents quickly and intelligently. This project is the backend home assignment:
-a simplified search API across clients and documents that supports three cases:
+Financial advisors need to find their clients and the clients' documents quickly and
+intelligently. This is a search API across clients and documents. It supports three cases:
 
 1. **Find clients** by their email, name or description. For example, `NevisWealth` should find
    the client with the email `john.doe@neviswealth.com`.
 2. **Find documents by similar terms**, not only exact words. For example, `address proof` should
    also find documents that contain "utility bill".
-3. *(Optional)* **Summarize a document**: a quick summary of its content.
-
-Expected deliverables: a REST API with OpenAPI docs, docker-compose for reproducibility, tests
-for the core logic and edge cases, and this README.
+3. **Summarize a document**: a quick summary of its content.
 
 ## The solution at a glance
 
@@ -340,7 +336,7 @@ The embedding model is baked into the image at build time, so the container runs
 - **Port and API key.** Copy [.env.example](.env.example) to `.env`. Change `APP_PORT` if 8000 is
   taken; set `API_KEY` to require an `X-API-Key` header on every API call.
 - **Database client.** Postgres is reachable from this machine only:
-  `postgresql://nevis:nevis@127.0.0.1:5433/nevis`. Change the port with `DB_PORT`.
+  `postgresql://advisor:advisor@127.0.0.1:5433/advisor`. Change the port with `DB_PORT`.
 ### Stopping
 
 Run these from the project folder. They affect only this project's containers (Compose project

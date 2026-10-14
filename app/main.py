@@ -93,14 +93,15 @@ def create_app(settings: Settings | None = None, embedder: Embedder | None = Non
         if settings.run_worker:
             container.worker.start()
         log.info(
-            "Nevis Search is up: UI %(url)s/ui  API docs %(url)s/api", {"url": settings.public_url}
+            "Advisor Search is up: UI %(url)s/ui  API docs %(url)s/api",
+            {"url": settings.public_url},
         )
         yield
         container.worker.stop()
         container.pool.close()
 
     app = FastAPI(
-        title="Nevis Search API",
+        title="Advisor Search API",
         version="1.0.0",
         description=DESCRIPTION,
         lifespan=lifespan,
