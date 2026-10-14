@@ -148,3 +148,60 @@ def test_stale_result_is_discarded_when_document_was_requeued(
     assert api.get(f"/documents/{doc['id']}").json()["status"] == "pending"
     assert worker.process_pending() == 1
     assert api.get(f"/documents/{doc['id']}").json()["status"] == "ready"
+
+
+def test_deleted_document_is_archived_and_hidden(
+    api: TestClient, make_client, make_document, worker
+) -> None:
+    client = make_client()
+    doc = make_document(client["id"], "Electricity bill", BILL)
+    kept = make_document(client["id"], "Another bill", BILL)
+    worker.process_pending()
+
+    assert api.delete(f"/documents/{doc['id']}").status_code == 204
+
+    assert api.get(f"/documents/{doc['id']}").status_code == 404
+    assert api.get(f"/documents/{doc['id']}/index").status_code == 404
+    assert api.post(f"/documents/{doc['id']}/reprocess").status_code == 404
+    listed = api.get(f"/clients/{client['id']}/documents").json()
+    assert [d["id"] for d in listed] == [kept["id"]]
+    found = api.get("/search", params={"q": "electricity usage", "type": "document"}).json()
+    assert [h["document"]["id"] for h in found] == [kept["id"]]
+    assert api.delete(f"/documents/{doc['id']}").status_code == 404  # already deleted
+
+
+def test_delete_unknown_document_is_404(api: TestClient) -> None:
+    assert api.delete(f"/documents/{uuid.uuid4()}").status_code == 404
+
+
+def test_document_deleted_before_indexing_is_never_indexed(
+    api: TestClient, app, make_client, make_document, worker
+) -> None:
+    doc = make_document(make_client()["id"], "Electricity bill", BILL)
+    assert api.delete(f"/documents/{doc['id']}").status_code == 204
+
+    assert worker.process_pending() == 0
+    with app.state.container.pool.connection() as conn:
+        chunks = conn.execute(
+            "SELECT count(*) FROM document_chunks WHERE document_id = %s", (doc["id"],)
+        ).fetchone()
+    assert chunks == (0,)
+
+
+def test_document_deleted_while_indexing_keeps_no_result(
+    api: TestClient, app, make_client, make_document, worker
+) -> None:
+    doc = make_document(make_client()["id"], "Electricity bill", BILL)
+    job = worker._claim()
+    assert job is not None and str(job.id) == doc["id"]
+    assert api.delete(f"/documents/{doc['id']}").status_code == 204
+
+    worker._process(job)  # finishes indexing after the delete
+
+    with app.state.container.pool.connection() as conn:
+        row = conn.execute(
+            "SELECT status, (SELECT count(*) FROM document_chunks WHERE document_id = d.id) "
+            "FROM documents d WHERE id = %s",
+            (doc["id"],),
+        ).fetchone()
+    assert row == ("processing", 0)

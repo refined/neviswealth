@@ -85,6 +85,12 @@ Shows what indexing produced; the UI's document inspector uses it.
 Queues the document for indexing again, for example after a failure. Returns the document with
 `status: "pending"`.
 
+### `DELETE /documents/{document_id}` → `204 No Content` | `404`
+
+Deletes a document. The record is archived rather than erased: it disappears from the client's
+document list, from search and from `GET /documents/{id}` (404), and its vectors are removed.
+Deleting it again returns 404.
+
 ## Search
 
 ### `GET /search?q=<text>&type=<client|document>&limit=20` → `200`

@@ -39,6 +39,14 @@ def get_document_index(
     )
 
 
+@router.delete(
+    "/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT, responses=NOT_FOUND
+)
+def delete_document(document_id: uuid.UUID, documents: DocumentServiceDep) -> None:
+    """Delete a document. It is archived: hidden from the API and from search, not erased."""
+    documents.archive(document_id)
+
+
 @router.post(
     "/documents/{document_id}/reprocess",
     status_code=status.HTTP_202_ACCEPTED,

@@ -366,6 +366,21 @@ async function renderDocument(id) {
     },
   }, "Reprocess");
 
+  const remove = h("button", {
+    class: "secondary",
+    onclick: async () => {
+      if (!confirm(`Delete "${doc.title}"? It will no longer appear in search.`)) return;
+      remove.disabled = true;
+      try {
+        await api("DELETE", `/documents/${id}`);
+        location.hash = `#/clients/${doc.client_id}`;
+      } catch (error) {
+        showError(error);
+        remove.disabled = false;
+      }
+    },
+  }, "Delete");
+
   const chunkRows = index.chunks.map((chunk) => {
     const row = h("tr", {
       class: "clickable",
@@ -393,7 +408,7 @@ async function renderDocument(id) {
         h("a", { class: "card-title", href: `#/clients/${client.id}` }, `${client.first_name} ${client.last_name}`),
         h("span", { class: "muted small" }, client.email)),
       client.description && h("div", { class: "summary small" }, client.description)),
-    h("div", { class: "card-head" }, h("h1", {}, doc.title), statusBadge(doc.status), reprocess),
+    h("div", { class: "card-head" }, h("h1", {}, doc.title), statusBadge(doc.status), reprocess, remove),
     isBusy && h("p", { class: "muted" }, "Indexing in progress — this page refreshes automatically."),
     doc.error && h("p", { class: "error" }, `Last error: ${doc.error}`),
     h("dl", { class: "meta card" },

@@ -22,8 +22,8 @@ The API stores clients and their text documents and searches both:
 | `GET /search?q=…` | Search clients and documents; one list sorted by relevance. |
 
 Supporting endpoints are `GET /clients`, `GET /clients/{id}`, `GET /clients/{id}/documents`,
-`GET /documents/{id}`, `GET /documents/{id}/index`, `POST /documents/{id}/reprocess` and
-`GET /health`. See them all, with request and response schemas, in the **Swagger UI at
+`GET /documents/{id}`, `GET /documents/{id}/index`, `POST /documents/{id}/reprocess`,
+`DELETE /documents/{id}` (archives the document) and `GET /health`. See them all, with request and response schemas, in the **Swagger UI at
 [`/api`](http://localhost:8000/api)** or in [docs/API.md](docs/API.md).
 
 **The main idea: do the expensive work once, when data is written, so search only reads indexes.**

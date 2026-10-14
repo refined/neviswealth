@@ -43,7 +43,7 @@ def get_document(conn: Connection, document_id: uuid.UUID) -> DocumentRecord | N
             SELECT id, client_id, title, content, created_at, status, summary, attempts, error,
                    processed_at, processing_ms
             FROM documents
-            WHERE id = %s
+            WHERE id = %s AND archived_at IS NULL
             """,
             (document_id,),
         )
@@ -57,7 +57,7 @@ def get_documents(conn: Connection, document_ids: list[uuid.UUID]) -> list[Docum
             SELECT id, client_id, title, content, created_at, status, summary, attempts, error,
                    processed_at, processing_ms
             FROM documents
-            WHERE id = ANY(%s)
+            WHERE id = ANY(%s) AND archived_at IS NULL
             """,
             (document_ids,),
         )
@@ -71,7 +71,7 @@ def list_client_documents(conn: Connection, client_id: uuid.UUID) -> list[Docume
             SELECT id, client_id, title, content, created_at, status, summary, attempts, error,
                    processed_at, processing_ms
             FROM documents
-            WHERE client_id = %s
+            WHERE client_id = %s AND archived_at IS NULL
             ORDER BY created_at DESC, id
             """,
             (client_id,),
@@ -85,13 +85,24 @@ def requeue_document(conn: Connection, document_id: uuid.UUID) -> DocumentRecord
             """
             UPDATE documents
             SET status = 'pending', attempts = 0, error = NULL, locked_at = NULL
-            WHERE id = %s
+            WHERE id = %s AND archived_at IS NULL
             RETURNING id, client_id, title, content, created_at, status, summary, attempts,
                       error, processed_at, processing_ms
             """,
             (document_id,),
         )
         return cur.fetchone()
+
+
+def archive_document(conn: Connection, document_id: uuid.UUID) -> bool:
+    # The row stays; its vectors go, so the nearest-chunk search can never return it.
+    archived = conn.execute(
+        "UPDATE documents SET archived_at = now() WHERE id = %s AND archived_at IS NULL",
+        (document_id,),
+    ).rowcount
+    if archived:
+        conn.execute("DELETE FROM document_chunks WHERE document_id = %s", (document_id,))
+    return bool(archived)
 
 
 def list_chunks(conn: Connection, document_id: uuid.UUID) -> list[ChunkRecord]:
@@ -156,9 +167,10 @@ def claim_next_document(conn: Connection, *, stale_after_s: int, max_attempts: i
             SET status = 'processing', locked_at = clock_timestamp(), attempts = attempts + 1
             WHERE id = (
                 SELECT id FROM documents
-                WHERE status = 'pending'
-                   OR (status = 'processing'
-                       AND locked_at < now() - make_interval(secs => %(stale_after_s)s))
+                WHERE archived_at IS NULL
+                  AND (status = 'pending'
+                       OR (status = 'processing'
+                           AND locked_at < now() - make_interval(secs => %(stale_after_s)s)))
                 ORDER BY created_at
                 FOR UPDATE SKIP LOCKED
                 LIMIT 1
@@ -173,13 +185,14 @@ def claim_next_document(conn: Connection, *, stale_after_s: int, max_attempts: i
 def save_index_result(
     conn: Connection, job: Job, *, summary: str, chunks: Sequence[NewChunk], processing_ms: int
 ) -> bool:
-    # Only if the claim is still ours: a requeue in the meantime resets `locked_at`.
+    # Only if the claim is still ours (a requeue in the meantime resets `locked_at`) and the
+    # document was not archived while it was being indexed.
     updated = conn.execute(
         """
         UPDATE documents
         SET status = 'ready', summary = %(summary)s, error = NULL, locked_at = NULL,
             processed_at = now(), processing_ms = %(processing_ms)s
-        WHERE id = %(id)s AND locked_at = %(locked_at)s
+        WHERE id = %(id)s AND locked_at = %(locked_at)s AND archived_at IS NULL
         """,
         {
             "summary": summary,
@@ -230,7 +243,7 @@ def lexical_matches(conn: Connection, query: str, *, limit: int) -> list[Lexical
                    ts_rank_cd(d.tsv, tq, 32) AS rank,
                    to_tsvector('english', d.title) @@ tq AS in_title
             FROM documents d, websearch_to_tsquery('english', %(q)s) AS tq
-            WHERE d.tsv @@ tq
+            WHERE d.tsv @@ tq AND d.archived_at IS NULL
             ORDER BY rank DESC
             LIMIT %(limit)s
             """,
@@ -285,7 +298,8 @@ def documents_with_phrases(
         """
         SELECT d.id
         FROM documents d
-        WHERE d.tsv @@ (SELECT tsquery_or_agg(phraseto_tsquery('english', p))
+        WHERE d.archived_at IS NULL
+          AND d.tsv @@ (SELECT tsquery_or_agg(phraseto_tsquery('english', p))
                         FROM unnest(%(phrases)s::text[]) AS p)
         LIMIT %(limit)s
         """,

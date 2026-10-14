@@ -63,6 +63,12 @@ class DocumentService:
                 embedding_model=self._embedding_model,
             )
 
+    def archive(self, document_id: uuid.UUID) -> None:
+        with self._pool.connection() as conn:
+            archived = table.documents.archive_document(conn, document_id)
+        if not archived:
+            raise NotFoundError("Document")
+
     def reprocess(self, document_id: uuid.UUID) -> DocumentRecord:
         with self._pool.connection() as conn:
             document = table.documents.requeue_document(conn, document_id)
