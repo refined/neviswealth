@@ -1,4 +1,5 @@
 import html
+import re
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass
@@ -46,6 +47,8 @@ _HEADLINE_OPTIONS = (
 
 
 def _render_headline(snippet: str) -> str:
+    # ts_headline marks each word separately; "⟦utility⟧ ⟦bill⟧" becomes one marked phrase.
+    snippet = re.sub(rf"{_MARK_END}(\s+){_MARK_START}", r"\1", snippet)
     return html.escape(snippet).replace(_MARK_START, "<mark>").replace(_MARK_END, "</mark>")
 
 

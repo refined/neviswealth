@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from app.indexing.text import client_field_terms
 from app.search.taxonomy import DOCUMENT_TYPES, TaxonomyMatcher, TypeMatch
 from app.services.search_clients import ClientSearch
-from app.services.search_documents import DocumentSearch, DocumentSignals
+from app.services.search_documents import DocumentSearch, DocumentSignals, _render_headline
 from app.table.records import ClientMatch
 from tests.fakes import HashingEmbedder
 
@@ -106,4 +106,10 @@ def test_typo_hit_has_no_highlight_but_substring_hit_does() -> None:
     assert clients._highlight(_client(), "jonh doe", ["name"]) is None
     assert clients._highlight(_client(), "nevis", ["email"]) == (
         "john.doe@<mark>nevis</mark>wealth.com"
+    )
+
+
+def test_adjacent_highlight_marks_merge_into_one_phrase() -> None:
+    assert _render_headline("a ⟦utility⟧ ⟦bill⟧, ⟦gas⟧ <b>") == (
+        "a <mark>utility bill</mark>, <mark>gas</mark> &lt;b&gt;"
     )

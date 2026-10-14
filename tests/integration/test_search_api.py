@@ -69,7 +69,7 @@ def test_pending_document_is_found_lexically(api: TestClient, make_client, make_
     assert hits[0]["document"]["status"] == "pending"
     assert hits[0]["matched_on"][0] == "content"
     assert "semantic" not in hits[0]["matched_on"]  # no embeddings until indexing finishes
-    assert "<mark>electricity</mark>" in hits[0]["highlight"].lower()
+    assert "<mark>electricity usage</mark>" in hits[0]["highlight"].lower()
 
 
 def test_ready_document_has_summary_and_semantic_signal(
@@ -98,7 +98,19 @@ def test_taxonomy_expansion_finds_utility_bill_for_address_proof(
     hits = _search(api, "address proof", type="document")
     assert hits[0]["document"]["id"] == bill["id"]
     assert "document_type:proof_of_address" in hits[0]["matched_on"]
-    assert hits[0]["highlight"]
+    # The phrase "electricity bill" is only in the title, so nothing in the content is marked:
+    # no stray single words such as "address" from the query or "bill" from a type phrase.
+    assert hits[0]["highlight"] and "<mark>" not in hits[0]["highlight"]
+
+
+def test_type_phrase_in_content_is_highlighted_as_one_phrase(
+    api: TestClient, make_client, make_document, worker
+) -> None:
+    make_document(make_client()["id"], "March", "Attached is the utility bill for March.")
+    worker.process_pending()
+
+    hits = _search(api, "address proof", type="document")
+    assert "<mark>utility bill</mark>" in hits[0]["highlight"]
 
 
 def test_garbage_query_returns_nothing(api: TestClient, make_client, make_document, worker) -> None:

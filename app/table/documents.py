@@ -317,9 +317,14 @@ def headlines(
     options: str,
     strip_chars: str,
 ) -> dict[uuid.UUID, str]:
-    # - One tsquery for everything that may have matched: the user's query (websearch_to_tsquery)
-    #   and each phrase (phraseto_tsquery) become rows (UNION ALL), and tsquery_or_agg ORs them
-    #   (see documents_with_phrases).
+    # - Per document, one tsquery from the parts its content really contains: the user's query
+    #   (websearch_to_tsquery) and each phrase (phraseto_tsquery) become rows (UNION ALL), the
+    #   ones the content matches (`content_tsv @@ t`) are kept, and tsquery_or_agg ORs them (see
+    #   documents_with_phrases). Without this filter ts_headline would mark single words of a
+    #   phrase that is not in the text ("address" from "address proof").
+    # - The filter uses the content only, not documents.tsv (title + content): ts_headline shows
+    #   the content. A document whose content contains none of the parts is left out, and the
+    #   caller falls back to another snippet.
     # - ts_headline(config, text, tsquery, options) picks the fragments of the text with the most
     #   matches and wraps each match in `StartSel`/`StopSel` from `options` (our markers).
     # - translate(text, chars, '') deletes every character listed in `chars`: here our markers, so
@@ -329,12 +334,14 @@ def headlines(
         SELECT d.id,
                ts_headline('english', translate(d.content, %(strip)s, ''), x.tq, %(options)s)
         FROM documents d,
-             (SELECT tsquery_or_agg(t) AS tq
-              FROM (SELECT websearch_to_tsquery('english', %(q)s) AS t
-                    UNION ALL
-                    SELECT phraseto_tsquery('english', p) FROM unnest(%(phrases)s::text[]) AS p
-                   ) AS parts) AS x
-        WHERE d.id = ANY(%(ids)s)
+             to_tsvector('english', d.content) AS content_tsv,
+             LATERAL (SELECT tsquery_or_agg(t) AS tq
+                      FROM (SELECT websearch_to_tsquery('english', %(q)s) AS t
+                            UNION ALL
+                            SELECT phraseto_tsquery('english', p)
+                            FROM unnest(%(phrases)s::text[]) AS p) AS parts
+                      WHERE content_tsv @@ t) AS x
+        WHERE d.id = ANY(%(ids)s) AND x.tq IS NOT NULL
         """,
         {"q": query, "phrases": phrases, "ids": ids, "options": options, "strip": strip_chars},
     )
