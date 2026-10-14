@@ -77,8 +77,8 @@ uv run ruff check . && uv run ruff format --check .
 - Seed data lives in `db/seed/`; search-quality queries live in `tests/eval/queries.json`.
 - Use type hints everywhere. Keep functions small and pure where possible; the indexing and search
   logic must be unit-testable without a database.
-- External dependencies sit behind small protocols (`Embedder`, `Summarizer`). Tests use fakes, so
-  they stay fast and offline.
+- The embedding model sits behind a small protocol (`Embedder`). Tests use a fake
+  (`tests/fakes.py`), so they stay fast and offline.
 - Every behavior change comes with tests. Edge cases matter: empty or huge input, unknown IDs,
   duplicates, garbage queries.
 - Follow REST conventions and return precise HTTP codes (201, 202, 404, 409, 422).

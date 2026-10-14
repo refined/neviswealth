@@ -13,9 +13,9 @@ from psycopg_pool import ConnectionPool
 
 from app import table
 from app.indexing.embedder import Embedder
-from app.indexing.pipeline import IndexedDocument, index_document
-from app.indexing.summarizer import Summarizer
-from app.table.records import DocumentStatus, Job
+from app.indexing.summarizer import ExtractiveSummarizer
+from app.indexing.text import chunk_sentences, split_sentences
+from app.table.records import DocumentStatus, Job, NewChunk
 
 log = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class IndexingWorker:
         self,
         pool: ConnectionPool,
         embedder: Embedder,
-        summarizer: Summarizer,
+        summarizer: ExtractiveSummarizer,
         *,
         chunk_max_words: int,
         max_attempts: int = 3,
@@ -78,13 +78,9 @@ class IndexingWorker:
 
     # -- processing ------------------------------------------------------------------------
 
-    def process_pending(
-        self, limit: int | None = None, stop_event: threading.Event | None = None
-    ) -> int:
+    def process_pending(self, stop_event: threading.Event | None = None) -> int:
         processed = 0
-        while limit is None or processed < limit:
-            if stop_event is not None and stop_event.is_set():
-                break
+        while stop_event is None or not stop_event.is_set():
             job = self._claim()
             if job is None:
                 break
@@ -101,24 +97,30 @@ class IndexingWorker:
     def _process(self, job: Job) -> None:
         started = time.perf_counter()
         try:
-            result = index_document(
-                job.title, job.content, self._embedder, self._summarizer, self._chunk_max_words
-            )
+            chunks, summary = self._index(job)
             elapsed_ms = int((time.perf_counter() - started) * 1000)
-            self._save(job, result, elapsed_ms)
+            self._save(job, chunks, summary, elapsed_ms)
         except Exception as exc:
             log.exception("Indexing failed for document %s (attempt %d)", job.id, job.attempts)
             self._fail(job, exc)
 
-    def _save(self, job: Job, result: IndexedDocument, elapsed_ms: int) -> None:
+    def _index(self, job: Job) -> tuple[list[NewChunk], str]:
+        spans = chunk_sentences(job.content, split_sentences(job.content), self._chunk_max_words)
+        # Each chunk carries the title so a chunk like "Amount due: $143" still knows it is a bill.
+        vectors = self._embedder.embed_documents([f"{job.title}. {s.text}" for s in spans])
+        chunks = [
+            NewChunk(i, span.text, span.start, span.end, vector)
+            for i, (span, vector) in enumerate(zip(spans, vectors, strict=True))
+        ]
+        return chunks, self._summarizer.summarize(job.content)
+
+    def _save(self, job: Job, chunks: list[NewChunk], summary: str, elapsed_ms: int) -> None:
         with self._pool.connection() as conn:
             saved = table.documents.save_index_result(
-                conn, job, summary=result.summary, chunks=result.chunks, processing_ms=elapsed_ms
+                conn, job, summary=summary, chunks=chunks, processing_ms=elapsed_ms
             )
         if saved:
-            log.info(
-                "Indexed document %s: %d chunks in %d ms", job.id, len(result.chunks), elapsed_ms
-            )
+            log.info("Indexed document %s: %d chunks in %d ms", job.id, len(chunks), elapsed_ms)
         else:
             log.info("Document %s changed while indexing; result discarded", job.id)
 

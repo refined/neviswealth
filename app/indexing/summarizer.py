@@ -1,13 +1,7 @@
-from typing import Protocol
-
 import numpy as np
 
 from app.indexing.embedder import Embedder, l2_normalize
 from app.indexing.text import split_sentences
-
-
-class Summarizer(Protocol):
-    def summarize(self, title: str, content: str) -> str: ...
 
 
 def truncate(text: str, max_chars: int) -> str:
@@ -65,7 +59,7 @@ class ExtractiveSummarizer:
         # Bounds the cost for very long documents: only the first N sentences are candidates.
         self.max_candidates = max_candidates
 
-    def summarize(self, title: str, content: str) -> str:
+    def summarize(self, content: str) -> str:
         sentences = [s.text for s in split_sentences(content)][: self.max_candidates]
         if not sentences:
             return ""
