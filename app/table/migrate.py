@@ -17,7 +17,10 @@ log = logging.getLogger(__name__)
 
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "db" / "migrations"
 
-# Arbitrary constant: serializes concurrent runners (e.g. two app containers starting at once).
+# pg_advisory_lock(key) is a lock on a number that only has meaning for the application: a
+# second session asking for the same key waits until the first calls pg_advisory_unlock(key).
+# The key is an arbitrary constant; it serializes concurrent runners (e.g. two app containers
+# starting at once).
 _ADVISORY_LOCK_KEY = 4_270_001
 
 

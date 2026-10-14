@@ -105,6 +105,11 @@ def client_matches(
     - `description_tsv @@ tq`: the description contains the query's words (`retired physician`).
     `query` must already be normalized (case-folded) like `search_text`. The raw signals
     (`word_similarity`, `description_rank`) are returned for scoring in app/search/scoring.py.
+
+    Helpers used below:
+    - `set_config(name, value, true)` sets the `<%` threshold; `true` keeps it only until the end
+      of the current transaction, so it does not leak into other requests on the pooled connection.
+    - `LIKE ... ESCAPE '\'`: a backslash makes the next `%` or `_` literal (see `escape_like`).
     """
     conn.execute(
         "SELECT set_config('pg_trgm.word_similarity_threshold', %s, true)",

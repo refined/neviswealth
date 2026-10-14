@@ -109,7 +109,9 @@ def list_chunks(conn: Connection, document_id: uuid.UUID) -> list[ChunkRecord]:
 
 
 def top_lexemes(conn: Connection, document_id: uuid.UUID, limit: int = 40) -> list[LexemeRecord]:
-    # unnest(tsvector) yields one row per stemmed lexeme with its positions and weights.
+    # unnest(tsvector) yields one row per stemmed lexeme: `positions` are the word numbers where
+    # it occurs (so their count is how often), `weights` are the labels of those occurrences
+    # (A = title, B = content).
     with conn.cursor(row_factory=class_row(LexemeRecord)) as cur:
         cur.execute(
             """
@@ -130,6 +132,9 @@ def top_lexemes(conn: Connection, document_id: uuid.UUID, limit: int = 40) -> li
 
 
 def claim_next_document(conn: Connection, *, stale_after_s: int, max_attempts: int) -> Job | None:
+    # make_interval(secs => n): an interval of n seconds, so `now() - interval` is "n seconds ago".
+    # now() is frozen at the start of the transaction; clock_timestamp() is the real current time,
+    # so every claim gets its own distinct `locked_at` stamp.
     # Give up on documents whose worker died after their last allowed attempt.
     conn.execute(
         """
@@ -237,9 +242,15 @@ def lexical_matches(conn: Connection, query: str, *, limit: int) -> list[Lexical
 def nearest_documents(
     conn: Connection, vector: np.ndarray, *, chunk_limit: int
 ) -> list[NearestDocument]:
-    # `<=>` is cosine distance (1 - cosine similarity), served by the HNSW index. Take the
-    # `chunk_limit` nearest chunks overall, then per document the best similarity and that chunk.
-    # An HNSW scan returns at most ef_search rows; keep it >= the LIMIT (transaction-local).
+    # `<=>` (pgvector) is cosine distance (1 - cosine similarity), served by the HNSW index. Take
+    # the `chunk_limit` nearest chunks overall, then per document the best similarity and that
+    # chunk.
+    # - `(array_agg(c.text ORDER BY c.distance))[1]`: collects the document's chunk texts into an
+    #   array sorted by distance and takes the first, i.e. the text of its closest chunk (arrays
+    #   in Postgres start at 1).
+    # - `hnsw.ef_search`: how many candidates the HNSW graph walk keeps, so at most that many rows
+    #   come back; keep it >= the LIMIT. set_config(name, value, true): the `true` makes the setting
+    #   last only until the end of the current transaction.
     conn.execute("SELECT set_config('hnsw.ef_search', %s, true)", (str(max(40, chunk_limit)),))
     with conn.cursor(row_factory=class_row(NearestDocument)) as cur:
         cur.execute(
@@ -263,8 +274,13 @@ def nearest_documents(
 def documents_with_phrases(
     conn: Connection, phrases: tuple[str, ...], *, limit: int
 ) -> set[uuid.UUID]:
-    # phraseto_tsquery('utility bill') = stemmed words in this order, next to each other;
-    # tsquery_or_agg (defined in 0001_initial.sql) ORs all phrases into one query.
+    # - unnest(array): turns the phrases array into rows, one phrase per row.
+    # - phraseto_tsquery('english', 'utility bill') = 'util' <-> 'bill': the stemmed words, next to
+    #   each other and in this order.
+    # - tsquery_or_agg(...): our own aggregate, defined in db/migrations/0001_initial.sql. It works
+    #   like sum(), but instead of adding numbers it joins the rows' tsqueries with OR, using the
+    #   built-in tsquery_or: 'util' <-> 'bill' | 'leas' <-> 'agreement' | ...
+    #   Result: one tsquery, so one index scan finds documents with any of the phrases.
     rows = conn.execute(
         """
         SELECT d.id
@@ -287,11 +303,13 @@ def headlines(
     options: str,
     strip_chars: str,
 ) -> dict[uuid.UUID, str]:
-    # One tsquery for everything that may have matched: the user's query OR any of the phrases
-    # combined with tsquery_or_agg.
-    # ts_headline picks the content fragments with the most matches and wraps each match in the
-    # marker characters from `options`; `strip_chars` removes those markers from the content first
-    # so only real matches carry them.
+    # - One tsquery for everything that may have matched: the user's query (websearch_to_tsquery)
+    #   and each phrase (phraseto_tsquery) become rows (UNION ALL), and tsquery_or_agg ORs them
+    #   (see documents_with_phrases).
+    # - ts_headline(config, text, tsquery, options) picks the fragments of the text with the most
+    #   matches and wraps each match in `StartSel`/`StopSel` from `options` (our markers).
+    # - translate(text, chars, '') deletes every character listed in `chars`: here our markers, so
+    #   only the matches marked by ts_headline carry them.
     rows = conn.execute(
         """
         SELECT d.id,
