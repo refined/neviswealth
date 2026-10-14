@@ -36,55 +36,8 @@ Supporting endpoints are `GET /clients`, `GET /clients/{id}`, `GET /clients/{id}
   writes a summary. This takes about 50 ms.
 - A search query only looks things up in those indexes and takes ~20-30 ms.
 
-`GET /search` runs the client search and the document search and merges them into one list
-sorted by score. Each search has the same three steps: **find** candidates through indexes,
-**score** them from 0 to 1, **highlight** why they matched.
-
-**Clients:** everything happens synchronously, in the request.
-
-```
-WRITE  POST /clients                                           one transaction, no background work
-  name, email, social links ─► app: normalize, split into identity terms
-        John Doe, john.doe@neviswealth.com ─► john doe · john · doe · john.doe · neviswealth.com
-                                               · neviswealth · …
-                                  ─► clients.search_text           GIN trigram index
-  description ─► Postgres: clients.description_tsv (generated)     GIN full-text index
-  email ─► unique index on lower(email)                            duplicate → 409
-
-SEARCH  GET /search?q=…                                        app/services/search_clients.py
-  1. find       one SQL query, three conditions ORed:
-                  search_text LIKE '%q%'       part of a name/email/handle   NevisWealth
-                  q <% search_text             the same with a typo          Jonh Doe (≥ 4 chars)
-                  description_tsv @@ q         description words             retired physician
-  2. score      whole term 1.0 · part of a term 0.9 · typo ≤ 0.85 · description 0.55–0.75
-                combined with noisy-OR
-  3. highlight  the email / name / link with the query wrapped in <mark>
-```
-
-**Documents:** words are indexed synchronously; meaning and summary by a background worker.
-
-```
-WRITE  POST /clients/{id}/documents
-  sync, same transaction:
-        documents row, status = pending
-        title + content ─► Postgres: documents.tsv (generated;     GIN full-text index
-                           title words weigh more than content)
-  async, background worker (polls the documents table, ~50 ms per document):
-        content ─► sentences ─► chunks of ≤ 120 words
-                ─► "title. chunk" ─► model ─► document_chunks.embedding   HNSW vector index
-                ─► sentences ─► model ─► up to 3 central sentences ─► documents.summary
-        status = ready (or failed after 3 attempts)
-
-SEARCH  GET /search?q=…                                        app/services/search_documents.py
-  0. the query is embedded once and matched to a document type     address proof → proof of address
-  1. find       words    documents.tsv matches the query           GIN
-                meaning  chunks nearest to the query vector,       HNSW
-                         pulled towards the matched type
-                type     documents containing a phrase of the type GIN   "electricity bill"
-  2. score      each signal → a confidence; a document needs words, a type phrase or
-                meaning ≥ 0.22; confidences combined with noisy-OR
-  3. highlight  matched words marked by ts_headline; else the closest chunk; else the start
-```
+Diagrams of how clients and documents flow through the system are in
+[How it works](#how-it-works).
 
 You can use it through the **REST API**, the **Swagger UI** (`/api`) or a **simple web UI**
 (`/ui`): search, browse clients, upload documents and inspect how each document was indexed.
@@ -94,10 +47,60 @@ uses about 270 MB of RAM.
 
 ## How it works
 
+`GET /search` runs the client search and the document search and merges them into one list
+sorted by score. Each search has the same three steps: **find** candidates through indexes,
+**score** them from 0 to 1, **highlight** why they matched.
+
 ### Part 1. Finding clients
 
 **The problem.** People search with a fragment, not the whole field: "NevisWealth" is only a piece
 of `john.doe@neviswealth.com`, and names get mistyped.
+
+**The whole flow.** Everything happens synchronously, in the request.
+
+```mermaid
+flowchart TB
+    input(["📇 POST /clients<br/>name · email · social links · description"])
+
+    subgraph write["✍️ On write — synchronous, one transaction"]
+        direction LR
+        split["<b>App</b>: normalize and split into identity terms<br/><i>john.doe@neviswealth.com → john · doe · neviswealth · …</i>"]
+        stem["<b>Postgres</b>: stem the description words<br/><i>retired physicians → retir · physician</i>"]
+    end
+
+    subgraph db["🐘 Postgres"]
+        direction LR
+        search_text[("clients.search_text<br/>GIN trigram index")]
+        description_tsv[("clients.description_tsv<br/>GIN full-text index")]
+    end
+
+    input --> split & stem
+    split --> search_text
+    stem --> description_tsv
+
+    subgraph search["🔍 GET /search?q=… — app/services/search_clients.py"]
+        direction TB
+        subgraph find["1 · Find — one SQL query, three conditions ORed"]
+            direction LR
+            part["<b>part of a term</b><br/>LIKE '%q%'<br/><i>NevisWealth</i>"]
+            typo["<b>with a typo</b><br/>trigram similarity ≥ 0.5<br/><i>Jonh Doe</i>"]
+            words["<b>description words</b><br/>full-text match<br/><i>retired physician</i>"]
+        end
+        score["<b>2 · Score</b> from 0 to 1<br/>whole term 1.0 · part of a term 0.9 · typo ≤ 0.85 · description 0.55–0.75<br/>combined with noisy-OR"]
+        highlight["<b>3 · Highlight</b><br/>the email, name or link with the query in &lt;mark&gt;"]
+        find --> score --> highlight
+    end
+
+    search_text --> part & typo
+    description_tsv --> words
+
+    classDef io fill:#ecfdf3,stroke:#3f9b5f,color:#0f3d1f
+    classDef step fill:#fff8e6,stroke:#d4a12a,color:#3d2c00
+    classDef store fill:#eaf2ff,stroke:#4a78c9,color:#0b2545
+    class input io
+    class split,stem,part,typo,words,score,highlight step
+    class search_text,description_tsv store
+```
 
 **When a client is created**, the app splits their identity into searchable terms and stores them
 in one column (`search_text`):
@@ -143,6 +146,83 @@ in one column (`search_text`):
 
 **The problem.** An advisor types `address proof`; the right document says "electricity bill" and
 never uses those words. Exact word search alone cannot find it, so three signals are combined.
+
+**On upload.** Words are indexed at once; meaning and summary come from a background worker.
+
+```mermaid
+flowchart TB
+    input(["📄 POST /clients/{id}/documents<br/>title · content"])
+
+    subgraph sync["⚡ Synchronous — same transaction"]
+        direction LR
+        row[("documents<br/>status = pending")]
+        tsv[("documents.tsv<br/>GIN full-text index<br/><i>title words weigh more</i>")]
+    end
+
+    subgraph worker["⚙️ Background worker"]
+        direction LR
+        sentences["split into sentences"]
+        chunks["chunks of ≤ 120 words,<br/>each prefixed with the title"]
+        embed["🧠 model: chunk → 384 numbers"]
+        summarize["🧠 model picks up to 3<br/>most central sentences"]
+        sentences --> chunks --> embed
+        sentences --> summarize
+    end
+
+    subgraph stored["🐘 Postgres"]
+        direction LR
+        vectors[("document_chunks.embedding<br/>HNSW vector index")]
+        summary[("documents.summary<br/>status = ready")]
+    end
+
+    input --> row & tsv
+    row -- "queue" --> sentences
+    embed --> vectors
+    summarize --> summary
+
+    classDef io fill:#ecfdf3,stroke:#3f9b5f,color:#0f3d1f
+    classDef step fill:#fff8e6,stroke:#d4a12a,color:#3d2c00
+    classDef store fill:#eaf2ff,stroke:#4a78c9,color:#0b2545
+    class input io
+    class sentences,chunks,embed,summarize step
+    class row,tsv,vectors,summary store
+```
+
+**On search.**
+
+```mermaid
+flowchart TB
+    input(["🔍 GET /search?q=address proof"])
+    query["🧠 model: query → query vector<br/>and its document type: <i>address proof → proof of address</i>"]
+
+    subgraph indexes["🐘 Postgres"]
+        direction LR
+        vectors[("document_chunks.embedding<br/>HNSW vector index")]
+        tsv[("documents.tsv<br/>GIN full-text index")]
+    end
+
+    subgraph find["1 · Find — three searches"]
+        direction LR
+        meaning["<b>meaning</b><br/>nearest chunks to the query vector,<br/>pulled towards the document type"]
+        words["<b>words</b><br/>full-text match<br/><i>electricity usage</i>"]
+        type["<b>document type</b><br/>contains a phrase of the type<br/><i>utility bill, lease agreement</i>"]
+    end
+
+    score["<b>2 · Score</b> from 0 to 1<br/>each signal → a confidence · needs words, a type phrase or meaning ≥ 0.22<br/>combined with noisy-OR"]
+    highlight["<b>3 · Highlight</b><br/>matched words marked by ts_headline · else the closest chunk · else the start"]
+
+    input --> query --> find
+    tsv --> words & type
+    vectors --> meaning
+    find --> score --> highlight
+
+    classDef io fill:#ecfdf3,stroke:#3f9b5f,color:#0f3d1f
+    classDef step fill:#fff8e6,stroke:#d4a12a,color:#3d2c00
+    classDef store fill:#eaf2ff,stroke:#4a78c9,color:#0b2545
+    class input io
+    class query,words,meaning,type,score,highlight step
+    class tsv,vectors store
+```
 
 **1. Words (full-text search).** An inverted index over the title and the content, with stemming;
 words in the title count more. It is built by Postgres in the same transaction as the upload, so
