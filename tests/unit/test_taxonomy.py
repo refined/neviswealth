@@ -1,3 +1,5 @@
+import numpy as np
+
 from app.search.taxonomy import DOCUMENT_TYPES, TaxonomyMatcher
 from tests.fakes import HashingEmbedder
 
@@ -29,6 +31,23 @@ def test_runner_up_type_far_behind_the_best_is_dropped() -> None:
     assert [m.type.key for m in matcher.match(query, min_similarity=0.0, top_k=2)] == [
         "proof_of_address"
     ]
+
+
+def test_blend_without_matches_keeps_the_query_vector() -> None:
+    query = embedder.embed_query("social security timing")
+    assert matcher.blend(query, [], weight=1.0) is query
+
+
+def test_blend_pulls_the_query_towards_the_matched_type() -> None:
+    query = embedder.embed_query("address proof")
+    matches = matcher.match(query, min_similarity=0.3)
+    centroid = matcher.centroid(matches[0].type)
+
+    blended = matcher.blend(query, matches, weight=1.0)
+
+    assert np.isclose(np.linalg.norm(blended), 1.0)
+    assert blended @ centroid > query @ centroid
+    assert blended @ query > 0.5
 
 
 def test_type_keys_are_unique() -> None:

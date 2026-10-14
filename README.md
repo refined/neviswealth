@@ -133,9 +133,11 @@ electricity bill right after upload, before background processing has finished.
   agreement, …
 - **How it is used.**
   1. The query is compared to these phrases with the same model.
-  2. If it clearly names a type, documents of that type are added: those that contain one of the
-     type's phrases, and those whose vectors are close to the type's "average meaning" (the
-     centroid of its phrases).
+  2. If it clearly names a type, two things happen:
+     - documents that contain one of the type's phrases get a *document type* signal;
+     - the meaning search runs with the query vector pulled towards the type's "average meaning"
+       (the centroid of its phrases), so documents of that type come closer. See *Blended query
+       vector* in the deep dive.
 - **Examples:**
   - `address proof` → the *Residential tenancy agreement* and the *Electricity bill*;
   - a water bill uploaded later, not part of the demo data, was found for `proof of residence`
@@ -268,12 +270,12 @@ uv run ruff check . && uv run ruff format --check .
   - the API key;
   - the spec contract.
 - **Search quality** (`tests/eval`): loads the demo data with the real model and checks
-  [21 queries with known answers](tests/eval/queries.json):
+  [42 queries with known answers](tests/eval/queries.json):
 
   | Set | Result |
   |---|---|
   | 11 development queries ("address proof", "proof of income", …) | 11/11 find an expected document in the top 3 |
-  | 10 held-out queries ("residence verification", "rental contract", …) | 9/10 |
+  | 31 held-out queries ("residence verification", "who inherits the house", …) | 29/31 |
   | 4 nonsense queries | 4/4 return nothing |
   | client queries ("NevisWealth", "Jonh Doe", …) | the client ranks first |
 
@@ -343,8 +345,29 @@ How to read the columns (higher is better for hit@1 and MRR, lower for the rest)
   ~0.32 against short phrases.
 - **Combining signals:** confidences are combined with a noisy-OR, `1 − Π(1 − cᵢ)`, so client and
   document scores share one [0, 1] scale.
-- **Held-out queries:** they were written before any tuning. The one held-out miss was not rescued
+- **Held-out queries:** they were written before any tuning (21 more were added before the
+  comparison below). The two misses, "KYC identification" and "ESG exclusions", were not rescued
   by lowering a threshold into the noise band.
+
+**Blended query vector.**
+- When the query names a document type, the meaning search does not use the query vector as is.
+  It uses `normalize(query + α · Σ similarityᵢ · centroidᵢ)` over the matched types, with α = 1.0.
+- This replaced a separate vector search by the type's centroid, which needed its own relative
+  cutoff. Now there is one vector search per query instead of one plus one per matched type.
+- On all 42 eval queries:
+
+  | | Expected document in top 3 | Expected document first | Avg score of the best expected document |
+  |---|---|---|---|
+  | separate centroid search (before) | 40/42 | 39/42 | 0.76 |
+  | blended vector (now) | 40/42 | 40/42 | 0.79 |
+- **The trade-off:**
+  - documents found *only* through their type score lower: `risk appetite` → the risk
+    questionnaire at 0.35 (it was 0.71 as a separate signal);
+  - their `matched_on` says `semantic` rather than `document_type:…`;
+  - a wrongly matched type pulls harder: `retirement planning` touches *estate planning*, so the
+    will comes second (0.49).
+- **Why α = 1.0:** α = 0.5 finds the same documents with lower scores. At α = 2.0 the wrong type
+  starts to win.
 
 **Plain SQL instead of an ORM.**
 - The schema is [SQL](db/migrations/0001_initial.sql).

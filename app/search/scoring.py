@@ -28,10 +28,10 @@ def _clip01(x: float) -> float:
 SEMANTIC_FLOOR = 0.15
 SEMANTIC_CEILING = 0.65
 
-# A document belongs to a matched type if its best chunk is close to the type's centroid: at
-# least the floor, and within the margin of the closest document (centroid scales vary by type).
-TYPE_CENTROID_MIN_SIMILARITY = 0.30
-TYPE_CENTROID_MARGIN = 0.10
+# How strongly a matched type pulls the query vector towards its centroid (TaxonomyMatcher.blend).
+# Measured on the eval set: 0.5 and 1.0 find the same documents, 1.0 with higher scores; at 2.0 a
+# wrongly matched type starts to dominate ("retirement planning" -> estate planning -> the will).
+TYPE_BLEND_WEIGHT = 1.0
 
 # Query-to-type similarity -> confidence. A query that names a type ("address proof", 1.0) gives a
 # strong signal; a vague one (~0.3) only nudges, so it cannot outrank a direct semantic match.

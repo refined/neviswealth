@@ -3,7 +3,8 @@
 Why: small embedding models do not know domain equivalences such as "a utility bill is a proof of
 address" (see README, "Design decisions"). The query is matched against each type's phrases with
 the embedding model. When it clearly refers to a type, documents of that type are retrieved
-(a) lexically, by the type's phrases, and (b) semantically, by closeness to the type's centroid.
+(a) lexically, by the type's phrases, and (b) semantically: the query vector is blended with the
+type's centroid before the nearest-chunk search.
 """
 
 from dataclasses import dataclass
@@ -149,3 +150,17 @@ class TaxonomyMatcher:
         order = np.argsort(-best)[:top_k]
         cutoff = max(min_similarity, float(best[order[0]]) - margin)
         return [TypeMatch(self.types[i], float(best[i])) for i in order if best[i] >= cutoff]
+
+    def blend(
+        self, query_vector: np.ndarray, matches: list[TypeMatch], weight: float
+    ) -> np.ndarray:
+        """The query vector pulled towards the centroids of the matched types.
+
+        `normalize(query + weight * sum(similarity * centroid))`: "address proof" then points at
+        "a typical proof-of-address document", next to an electricity bill. The more confident the
+        type match, the stronger the pull; with no match the query vector is returned unchanged.
+        """
+        if not matches:
+            return query_vector
+        pull = sum(m.similarity * self.centroid(m.type) for m in matches)
+        return l2_normalize(query_vector + weight * pull)

@@ -9,13 +9,12 @@ from app import schemas
 from app.indexing.embedder import Embedder
 from app.indexing.summarizer import truncate
 from app.search.scoring import (
-    TYPE_CENTROID_MARGIN,
-    TYPE_CENTROID_MIN_SIMILARITY,
+    TYPE_BLEND_WEIGHT,
     DocumentSignals,
     document_matched_on,
     score_document,
 )
-from app.search.taxonomy import TaxonomyMatcher
+from app.search.taxonomy import TaxonomyMatcher, TypeMatch
 from app.table import documents
 from app.table.records import DocumentRecord
 
@@ -56,9 +55,14 @@ class DocumentSearch:
     def search(self, conn: Connection, query: str, limit: int) -> list[schemas.DocumentHit]:
         signals: dict[uuid.UUID, DocumentSignals] = defaultdict(DocumentSignals)
         query_vector = self.embedder.embed_query(query)
+        # We blend domain knowledge: "address proof" -> type "proof of address".
+        # The type steers both the meaning search (blended vector) and its own phrase search.
+        type_matches = self.taxonomy.match(query_vector, self.taxonomy_min_similarity)
         self._search_by_words(conn, query, signals)
-        self._search_by_meaning(conn, query_vector, signals)
-        self._search_by_document_type(conn, query_vector, signals)
+        self._search_by_meaning(
+            conn, self.taxonomy.blend(query_vector, type_matches, TYPE_BLEND_WEIGHT), signals
+        )
+        self._search_by_document_type(conn, type_matches, signals)
         scored = self._score(signals, limit)
         if not scored:
             return []
@@ -94,7 +98,8 @@ class DocumentSearch:
         query_vector: np.ndarray,
         signals: dict[uuid.UUID, DocumentSignals],
     ) -> None:
-        # Embeddings: the chunks nearest to the query (HNSW index), best chunk per document.
+        # Embeddings: the chunks nearest to the (blended) query vector (HNSW index), best chunk
+        # per document.
         for nearest in documents.nearest_documents(
             conn, query_vector, chunk_limit=self.semantic_candidate_chunks
         ):
@@ -104,22 +109,15 @@ class DocumentSearch:
     def _search_by_document_type(
         self,
         conn: Connection,
-        query_vector: np.ndarray,
+        type_matches: list[TypeMatch],
         signals: dict[uuid.UUID, DocumentSignals],
     ) -> None:
-        # Domain knowledge: "address proof" -> type "proof of address" -> its documents, found by
-        # the type's phrases ("utility bill", "lease agreement", ...) and by its centroid.
-        for type_match in self.taxonomy.match(query_vector, self.taxonomy_min_similarity):
-            doc_type = type_match.type
-            ids = documents.documents_with_phrases(conn, doc_type.all_phrases, limit=_CANDIDATES)
-            # Absolute centroid similarities differ per type, so keep the documents close to the
-            # best one (and above a floor) rather than applying one global threshold.
-            nearest = documents.nearest_documents(
-                conn, self.taxonomy.centroid(doc_type), chunk_limit=self.semantic_candidate_chunks
+        # Documents that contain one of the matched type's phrases ("utility bill", "lease
+        # agreement", ...) get the type signal.
+        for type_match in type_matches:
+            ids = documents.documents_with_phrases(
+                conn, type_match.type.all_phrases, limit=_CANDIDATES
             )
-            top = max((n.similarity for n in nearest), default=0.0)
-            cutoff = max(TYPE_CENTROID_MIN_SIMILARITY, top - TYPE_CENTROID_MARGIN)
-            ids |= {n.document_id for n in nearest if n.similarity >= cutoff}
             for doc_id in ids:
                 current = signals[doc_id].taxonomy
                 if current is None or current.similarity < type_match.similarity:
