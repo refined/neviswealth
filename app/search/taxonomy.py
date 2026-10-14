@@ -40,48 +40,57 @@ DOCUMENT_TYPES: tuple[DocumentType, ...] = (
         "Identity document",
         (
             "proof of identity", "photo ID", "passport", "driver license", "driving licence",
-            "national identity card", "ID card",
+            "national identity card", "ID card", "passport copy", "identity card",
+            "government-issued ID", "residence permit", "identity verification",
         ),
     ),
     DocumentType(
         "proof_of_income",
         "Proof of income",
-        ("income verification", "payslip", "pay stub", "salary slip", "employment letter", "W-2"),
+        ("income verification", "payslip", "pay stub", "salary slip", "employment letter", "W-2",
+         "pay slip", "earnings statement", "proof of employment", "salary certificate",
+         "wage statement"),
     ),
     DocumentType(
         "tax_document",
         "Tax document",
-        ("tax return", "Form 1040", "Form 1099", "tax assessment"),
+        ("tax return", "Form 1040", "Form 1099", "tax assessment", "income tax return",
+         "tax filing", "tax certificate", "Schedule K-1"),
     ),
     DocumentType(
         "bank_statement",
         "Bank statement",
         ("account statement", "checking account", "savings account", "current account",
-         "wire transfer"),
+         "wire transfer", "bank account statement", "deposit account", "wire confirmation",
+         "bank transfer"),
     ),
     DocumentType(
         "investment_statement",
         "Investment statement",
         ("brokerage statement", "portfolio statement", "custody statement",
-         "securities holdings", "stocks and ETFs"),
+         "securities holdings", "stocks and ETFs", "brokerage account", "investment account",
+         "portfolio valuation", "holdings report"),
     ),
     DocumentType(
         "risk_profile",
         "Risk profile",
         ("risk tolerance questionnaire", "risk appetite", "investor profile",
-         "suitability assessment", "risk score"),
+         "suitability assessment", "risk score", "investor questionnaire", "risk questionnaire",
+         "attitude to risk", "risk assessment", "risk classification"),
     ),
     DocumentType(
         "estate_planning",
         "Estate planning document",
         ("last will and testament", "trust deed", "trust agreement", "power of attorney",
-         "beneficiary designation"),
+         "beneficiary designation", "estate plan", "living trust", "letter of wishes",
+         "inheritance planning"),
     ),
     DocumentType(
         "loan_or_mortgage",
         "Loan or mortgage",
         ("mortgage statement", "home loan", "loan agreement", "credit facility",
-         "outstanding principal"),
+         "outstanding principal", "mortgage loan", "loan statement", "repayment schedule",
+         "buy-to-let mortgage"),
     ),
     DocumentType(
         "insurance_policy",
@@ -91,7 +100,8 @@ DOCUMENT_TYPES: tuple[DocumentType, ...] = (
     DocumentType(
         "source_of_wealth",
         "Source of wealth",
-        ("source of funds", "AML declaration", "origin of funds", "proceeds from business sale"),
+        ("source of funds", "AML declaration", "origin of funds", "proceeds from business sale",
+         "sale of business", "liquidity event", "wealth origin"),
     ),
     DocumentType(
         "investment_policy",
@@ -101,7 +111,8 @@ DOCUMENT_TYPES: tuple[DocumentType, ...] = (
     DocumentType(
         "meeting_notes",
         "Meeting notes",
-        ("client meeting", "call notes", "review meeting", "action items"),
+        ("client meeting", "call notes", "review meeting", "action items", "meeting minutes",
+         "client review notes", "follow-up actions"),
     ),
 )  # fmt: skip
 
