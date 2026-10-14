@@ -1,6 +1,7 @@
 import html
 import uuid
 from collections import defaultdict
+from dataclasses import dataclass
 
 import numpy as np
 from psycopg import Connection
@@ -8,17 +9,27 @@ from psycopg import Connection
 from app import schemas, table
 from app.indexing.embedder import Embedder
 from app.indexing.summarizer import truncate
-from app.search.scoring import (
-    TYPE_BLEND_WEIGHT,
-    DocumentSignals,
-    document_matched_on,
-    score_document,
-)
+from app.search.scoring import clip01, noisy_or
 from app.search.taxonomy import TaxonomyMatcher, TypeMatch
 from app.table.records import DocumentRecord
 
 # Candidates fetched per retrieval channel before scoring.
 _CANDIDATES = 100
+
+# Cosine similarities of all-MiniLM-L6-v2 for relevant pairs mostly sit in 0.2..0.6 and unrelated
+# queries stay below ~0.15 on the seed corpus (see scripts/spike_embeddings.py).
+SEMANTIC_FLOOR = 0.15
+SEMANTIC_CEILING = 0.65
+
+# Query-to-type similarity -> confidence. A query that names a type ("address proof", 1.0) gives a
+# strong signal; a vague one (~0.3) only nudges, so it cannot outrank a direct semantic match.
+TAXONOMY_FLOOR = 0.25
+TAXONOMY_CEILING = 0.75
+
+# How strongly a matched type pulls the query vector towards its centroid (TaxonomyMatcher.blend).
+# Measured on the eval set: 0.5 and 1.0 find the same documents, 1.0 with higher scores; at 2.0 a
+# wrongly matched type starts to dominate ("retirement planning" -> estate planning -> the will).
+TYPE_BLEND_WEIGHT = 1.0
 
 # ts_headline returns raw document text. It marks matches with private markers; the snippet is
 # HTML-escaped in Python and only then are the markers turned into <mark> tags.
@@ -31,6 +42,17 @@ _HEADLINE_OPTIONS = (
 
 def _render_headline(snippet: str) -> str:
     return html.escape(snippet).replace(_MARK_START, "<mark>").replace(_MARK_END, "</mark>")
+
+
+@dataclass
+class DocumentSignals:
+    """What the three searches found about one document."""
+
+    lexical_rank: float | None = None  # ts_rank_cd(..., 32), already in [0, 1)
+    in_title: bool = False
+    semantic: float | None = None  # best chunk cosine similarity
+    best_chunk: str | None = None
+    taxonomy: TypeMatch | None = None
 
 
 class DocumentSearch:
@@ -62,12 +84,19 @@ class DocumentSearch:
             conn, self.taxonomy.blend(query_vector, type_matches, TYPE_BLEND_WEIGHT), signals
         )
         self._search_by_document_type(conn, type_matches, signals)
-        scored = self._score(signals, limit)
+
+        scored = [
+            (score, doc_id, sig)
+            for doc_id, sig in signals.items()
+            if (score := self._score(sig)) is not None
+        ]
+        scored.sort(key=lambda item: -item[0])
+        scored = scored[:limit]
         if not scored:
             return []
 
         found = {d.id: d for d in table.documents.get_documents(conn, [i for _, i, _ in scored])}
-        highlights = self._document_highlights(conn, query, scored, found)
+        highlights = self._highlights(conn, query, scored, found)
         hits = []
         for score, doc_id, sig in scored:
             document = found.get(doc_id)
@@ -76,7 +105,7 @@ class DocumentSearch:
             hits.append(
                 schemas.DocumentHit(
                     score=score,
-                    matched_on=document_matched_on(sig, self.semantic_min_similarity),
+                    matched_on=self._matched_on(sig),
                     highlight=highlights.get(doc_id),
                     document=schemas.Document.model_validate(document),
                 )
@@ -122,19 +151,44 @@ class DocumentSearch:
                 if current is None or current.similarity < type_match.similarity:
                     signals[doc_id].taxonomy = type_match
 
-    def _score(
-        self, signals: dict[uuid.UUID, DocumentSignals], limit: int
-    ) -> list[tuple[float, uuid.UUID, DocumentSignals]]:
-        # Relevant documents, best first; the formulas and thresholds live in app/search/scoring.py.
-        scored = [
-            (score, doc_id, sig)
-            for doc_id, sig in signals.items()
-            if (score := score_document(sig, self.semantic_min_similarity)) is not None
-        ]
-        scored.sort(key=lambda item: -item[0])
-        return scored[:limit]
+    def _score(self, sig: DocumentSignals) -> float | None:
+        """Relevance in [0, 1], or None if no signal is strong enough to show the document."""
+        if not (
+            sig.lexical_rank is not None
+            or sig.taxonomy is not None
+            or (sig.semantic is not None and sig.semantic >= self.semantic_min_similarity)
+        ):
+            return None
+        # Each signal -> a confidence in [0, 1]; the confidences are combined with noisy-OR.
+        confidences = []
+        if sig.lexical_rank is not None:  # words: 0.6, +0.15 in the title, +0.15 by rank
+            confidences.append(
+                0.6 + (0.15 if sig.in_title else 0.0) + 0.15 * clip01(sig.lexical_rank / 0.3)
+            )
+        if sig.semantic is not None:  # meaning: linear from SEMANTIC_FLOOR to SEMANTIC_CEILING
+            confidences.append(
+                0.9 * clip01((sig.semantic - SEMANTIC_FLOOR) / (SEMANTIC_CEILING - SEMANTIC_FLOOR))
+            )
+        if sig.taxonomy is not None:  # type phrase: by how clearly the query names the type
+            confidences.append(
+                0.7
+                * clip01(
+                    (sig.taxonomy.similarity - TAXONOMY_FLOOR) / (TAXONOMY_CEILING - TAXONOMY_FLOOR)
+                )
+            )
+        return round(noisy_or(confidences), 4)
 
-    def _document_highlights(
+    def _matched_on(self, sig: DocumentSignals) -> list[str]:
+        matched = []
+        if sig.lexical_rank is not None:
+            matched.append("title" if sig.in_title else "content")
+        if sig.semantic is not None and sig.semantic >= self.semantic_min_similarity:
+            matched.append("semantic")
+        if sig.taxonomy is not None:
+            matched.append(f"document_type:{sig.taxonomy.type.key}")
+        return matched
+
+    def _highlights(
         self,
         conn: Connection,
         query: str,

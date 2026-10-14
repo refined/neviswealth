@@ -104,7 +104,8 @@ def client_matches(
     - `q <% search_text`: the same with typos (`jonh doe`); off for short queries (`fuzzy`);
     - `description_tsv @@ tq`: the description contains the query's words (`retired physician`).
     `query` must already be normalized (case-folded) like `search_text`. The raw signals
-    (`word_similarity`, `description_rank`) are returned for scoring in app/search/scoring.py.
+    (`word_similarity`, `description_rank`) are returned for scoring in
+    app/services/search_clients.py.
 
     Helpers used below:
     - `set_config(name, value, true)` sets the `<%` threshold; `true` keeps it only until the end
