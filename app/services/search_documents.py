@@ -31,6 +31,11 @@ TAXONOMY_CEILING = 0.75
 # wrongly matched type starts to dominate ("retirement planning" -> estate planning -> the will).
 TYPE_BLEND_WEIGHT = 1.0
 
+# A document is shown only if it scores at least this share of the best document for the query.
+# Weak "meaning only" neighbours (0.13-0.30 next to a 0.9 hit) were most of the noise: on the 42
+# eval queries this cut drops 133 -> 30 unexpected documents and keeps every top-3 answer.
+RELATIVE_CUTOFF = 0.5
+
 # ts_headline returns raw document text. It marks matches with private markers; the snippet is
 # HTML-escaped in Python and only then are the markers turned into <mark> tags.
 _MARK_START, _MARK_END = "⟦", "⟧"
@@ -91,9 +96,10 @@ class DocumentSearch:
             if (score := self._score(sig)) is not None
         ]
         scored.sort(key=lambda item: -item[0])
-        scored = scored[:limit]
         if not scored:
             return []
+        cutoff = RELATIVE_CUTOFF * scored[0][0]
+        scored = [item for item in scored if item[0] >= cutoff][:limit]
 
         found = {d.id: d for d in table.documents.get_documents(conn, [i for _, i, _ in scored])}
         highlights = self._highlights(conn, query, scored, found)

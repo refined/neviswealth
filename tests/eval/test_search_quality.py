@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.main import create_app
+from app.services.search_documents import RELATIVE_CUTOFF
 from tests.conftest import ROOT
 
 pytestmark = pytest.mark.model
@@ -109,3 +110,11 @@ def test_expected_document_ranks_high(seeded: Seeded, item: dict) -> None:
 @pytest.mark.parametrize("q", QUERIES["negative_queries"])
 def test_unrelated_query_returns_nothing(seeded: Seeded, q: str) -> None:
     assert seeded.search(q) == []
+
+
+@pytest.mark.parametrize("q", ["pension income", "conservative investor", "stock holdings"])
+def test_weak_documents_far_below_the_best_are_cut(seeded: Seeded, q: str) -> None:
+    hits = seeded.search(q, type="document")
+    assert hits
+    assert all(h["score"] >= RELATIVE_CUTOFF * hits[0]["score"] for h in hits)
+    assert len(hits) <= 4  # these returned 7-9 documents before the cut
