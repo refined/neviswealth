@@ -19,7 +19,6 @@ from app.services.search import SearchService
 from app.services.search_clients import ClientSearch
 from app.services.search_documents import DocumentSearch
 from app.table.connection import create_pool
-from app.table.records import EMBEDDING_DIM
 
 DOCS_URL = "/api"  # Swagger UI
 OPENAPI_URL = "/api/openapi.json"
@@ -39,12 +38,9 @@ Errors use FastAPI's standard shape: `{"detail": ...}`.
 
 
 def build_container(settings: Settings, embedder: Embedder | None = None) -> Container:
-    if settings.embedding_dim != EMBEDDING_DIM:
-        raise ValueError(f"EMBEDDING_DIM must be {EMBEDDING_DIM} (fixed by the database schema)")
     pool = create_pool(settings.database_url)
     embedder = embedder or create_embedder(
         settings.embedding_model,
-        settings.embedding_dim,
         cache_dir=settings.model_cache_dir,
         threads=settings.embedding_threads,
     )

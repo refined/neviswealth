@@ -115,17 +115,17 @@ class TypeMatch:
 class TaxonomyMatcher:
     def __init__(self, embedder: Embedder, types: tuple[DocumentType, ...] = DOCUMENT_TYPES):
         self.types = types
-        self._owners: list[int] = []
+        owners: list[int] = []  # owners[i] = index of the type that phrase i belongs to
         phrases: list[str] = []
         for index, doc_type in enumerate(types):
             for phrase in doc_type.all_phrases:
-                self._owners.append(index)
+                owners.append(index)
                 phrases.append(phrase)
-        self._owners_arr = np.array(self._owners)
+        self._owners = np.array(owners)
         self._vectors = embedder.embed_documents(phrases)
         # The centroid of a type's phrases stands for "a document of this type" in vector space.
         self._centroids = {
-            doc_type.key: l2_normalize(self._vectors[self._owners_arr == index].mean(axis=0))
+            doc_type.key: l2_normalize(self._vectors[self._owners == index].mean(axis=0))
             for index, doc_type in enumerate(types)
         }
 
@@ -146,7 +146,7 @@ class TaxonomyMatcher:
         """
         similarities = self._vectors @ query_vector
         best = np.full(len(self.types), -1.0)
-        np.maximum.at(best, self._owners_arr, similarities)
+        np.maximum.at(best, self._owners, similarities)
         order = np.argsort(-best)[:top_k]
         cutoff = max(min_similarity, float(best[order[0]]) - margin)
         return [TypeMatch(self.types[i], float(best[i])) for i in order if best[i] >= cutoff]

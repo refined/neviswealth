@@ -6,6 +6,8 @@ from typing import Protocol
 
 import numpy as np
 
+from app.table.records import EMBEDDING_DIM
+
 
 class Embedder(Protocol):
     model_name: str
@@ -48,13 +50,11 @@ class FastEmbedEmbedder:
         return l2_normalize(np.asarray(vector, dtype=np.float32))
 
 
-def create_embedder(
-    model_name: str, dim: int, cache_dir: str | None = None, threads: int = 1
-) -> Embedder:
+def create_embedder(model_name: str, cache_dir: str | None = None, threads: int = 1) -> Embedder:
     embedder = FastEmbedEmbedder(model_name, cache_dir=cache_dir, threads=threads)
-    if embedder.dim != dim:
+    if embedder.dim != EMBEDDING_DIM:
         raise ValueError(
             f"Embedding model {model_name!r} produces {embedder.dim}-d vectors, "
-            f"but the database schema expects {dim}-d vectors"
+            f"but the database schema expects {EMBEDDING_DIM}-d vectors"
         )
     return embedder

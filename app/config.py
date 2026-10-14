@@ -17,7 +17,6 @@ class Settings:
 
     # Embeddings.
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
-    embedding_dim: int = 384
     model_cache_dir: str | None = None
     # One intra-op thread keeps background indexing from starving requests on a 1 vCPU box.
     embedding_threads: int = 1
