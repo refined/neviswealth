@@ -59,13 +59,14 @@ of `john.doe@neviswealth.com`, and names get mistyped.
 **The whole flow.** Everything happens synchronously, in the request.
 
 ```mermaid
+%%{init: {"flowchart": {"htmlLabels": false}}}%%
 flowchart TB
     input(["📇 POST /clients<br/>name · email · social links · description"])
 
     subgraph write["✍️ On write — synchronous, one transaction"]
         direction LR
-        split["<b>App</b>: normalize and split into identity terms<br/><i>john.doe@neviswealth.com → john · doe · neviswealth · …</i>"]
-        stem["<b>Postgres</b>: stem the description words<br/><i>retired physicians → retir · physician</i>"]
+        split["App: normalize and split into identity terms<br/>john.doe@neviswealth.com → john · doe · neviswealth · …"]
+        stem["Postgres: stem the description words<br/>retired physicians → retir · physician"]
     end
 
     subgraph db["🐘 Postgres"]
@@ -82,12 +83,12 @@ flowchart TB
         direction TB
         subgraph find["1 · Find — one SQL query, three conditions ORed"]
             direction LR
-            part["<b>part of a term</b><br/>LIKE '%q%'<br/><i>NevisWealth</i>"]
-            typo["<b>with a typo</b><br/>trigram similarity ≥ 0.5<br/><i>Jonh Doe</i>"]
-            words["<b>description words</b><br/>full-text match<br/><i>retired physician</i>"]
+            part["part of a term<br/>LIKE '%q%'<br/>NevisWealth"]
+            typo["with a typo<br/>trigram similarity ≥ 0.5<br/>Jonh Doe"]
+            words["description words<br/>full-text match<br/>retired physician"]
         end
-        score["<b>2 · Score</b> from 0 to 1<br/>whole term 1.0 · part of a term 0.9 · typo ≤ 0.85 · description 0.55–0.75<br/>combined with noisy-OR"]
-        highlight["<b>3 · Highlight</b><br/>the email, name or link with the query in &lt;mark&gt;"]
+        score["2 · Score from 0 to 1<br/>whole term 1.0 · part of a term 0.9 · typo ≤ 0.85 · description 0.55–0.75<br/>combined with noisy-OR"]
+        highlight["3 · Highlight<br/>the email, name or link with the query marked"]
         find --> score --> highlight
     end
 
@@ -150,13 +151,14 @@ never uses those words. Exact word search alone cannot find it, so three signals
 **On upload.** Words are indexed at once; meaning and summary come from a background worker.
 
 ```mermaid
+%%{init: {"flowchart": {"htmlLabels": false}}}%%
 flowchart TB
     input(["📄 POST /clients/{id}/documents<br/>title · content"])
 
     subgraph sync["⚡ Synchronous — same transaction"]
         direction LR
         row[("documents<br/>status = pending")]
-        tsv[("documents.tsv<br/>GIN full-text index<br/><i>title words weigh more</i>")]
+        tsv[("documents.tsv<br/>GIN full-text index<br/>title words weigh more")]
     end
 
     subgraph worker["⚙️ Background worker"]
@@ -191,9 +193,10 @@ flowchart TB
 **On search.**
 
 ```mermaid
+%%{init: {"flowchart": {"htmlLabels": false}}}%%
 flowchart TB
     input(["🔍 GET /search?q=address proof"])
-    query["🧠 model: query → query vector<br/>and its document type: <i>address proof → proof of address</i>"]
+    query["🧠 model: query → query vector<br/>and its document type: address proof → proof of address"]
 
     subgraph indexes["🐘 Postgres"]
         direction LR
@@ -203,13 +206,13 @@ flowchart TB
 
     subgraph find["1 · Find — three searches"]
         direction LR
-        meaning["<b>meaning</b><br/>nearest chunks to the query vector,<br/>pulled towards the document type"]
-        words["<b>words</b><br/>full-text match<br/><i>electricity usage</i>"]
-        type["<b>document type</b><br/>contains a phrase of the type<br/><i>utility bill, lease agreement</i>"]
+        meaning["meaning<br/>nearest chunks to the query vector,<br/>pulled towards the document type"]
+        words["words<br/>full-text match<br/>electricity usage"]
+        type["document type<br/>contains a phrase of the type<br/>utility bill, lease agreement"]
     end
 
-    score["<b>2 · Score</b> from 0 to 1<br/>each signal → a confidence · needs words, a type phrase or meaning ≥ 0.22<br/>combined with noisy-OR"]
-    highlight["<b>3 · Highlight</b><br/>matched words marked by ts_headline · else the closest chunk · else the start"]
+    score["2 · Score from 0 to 1<br/>each signal → a confidence · needs words, a type phrase or meaning ≥ 0.22<br/>combined with noisy-OR"]
+    highlight["3 · Highlight<br/>matched words marked by ts_headline · else the closest chunk · else the start"]
 
     input --> query --> find
     tsv --> words & type
