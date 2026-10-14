@@ -16,6 +16,8 @@ from app.services.clients import ClientService
 from app.services.documents import DocumentService
 from app.services.health import HealthService
 from app.services.search import SearchService
+from app.services.search_clients import ClientSearch
+from app.services.search_documents import DocumentSearch
 from app.table.connection import create_pool
 from app.table.records import EMBEDDING_DIM
 
@@ -53,11 +55,14 @@ def build_container(settings: Settings, embedder: Embedder | None = None) -> Con
     )
     search_service = SearchService(
         pool,
-        embedder,
-        TaxonomyMatcher(embedder),
-        semantic_min_similarity=settings.semantic_min_similarity,
-        taxonomy_min_similarity=settings.taxonomy_min_similarity,
-        semantic_candidate_chunks=settings.semantic_candidate_chunks,
+        ClientSearch(),
+        DocumentSearch(
+            embedder,
+            TaxonomyMatcher(embedder),
+            semantic_min_similarity=settings.semantic_min_similarity,
+            taxonomy_min_similarity=settings.taxonomy_min_similarity,
+            semantic_candidate_chunks=settings.semantic_candidate_chunks,
+        ),
     )
     worker = IndexingWorker(
         pool,

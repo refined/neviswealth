@@ -1,7 +1,7 @@
 import numpy as np
 
-from app.indexing.embedder import HashingEmbedder
 from app.indexing.summarizer import ExtractiveSummarizer, select_sentences, truncate
+from tests.fakes import HashingEmbedder
 
 summarizer = ExtractiveSummarizer(HashingEmbedder(), max_sentences=2, max_chars=300)
 

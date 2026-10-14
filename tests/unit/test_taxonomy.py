@@ -1,5 +1,5 @@
-from app.indexing.embedder import HashingEmbedder
 from app.search.taxonomy import DOCUMENT_TYPES, TaxonomyMatcher
+from tests.fakes import HashingEmbedder
 
 embedder = HashingEmbedder()
 matcher = TaxonomyMatcher(embedder)

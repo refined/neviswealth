@@ -143,7 +143,7 @@ def test_stopword_only_query_is_handled(api: TestClient, make_client, make_docum
 
 
 def test_api_key_protects_endpoints_when_configured(database_url: str) -> None:
-    from app.indexing.embedder import HashingEmbedder
+    from tests.fakes import HashingEmbedder
 
     app = create_app(make_settings(database_url, api_key="s3cret"), embedder=HashingEmbedder())
     with TestClient(app) as api:

@@ -214,7 +214,6 @@ def record_failure(conn: Connection, job: Job, *, status: DocumentStatus, error:
 
 def lexical_matches(conn: Connection, query: str, *, limit: int) -> list[LexicalMatch]:
     # `tsv @@ tsquery`: does the document's word index (tsvector) satisfy the search query
-    # (tsquery: stems with & | ! <-> operators, e.g. 'electr' & 'usag')?
     # websearch_to_tsquery: Google-like syntax ("quotes", OR, -minus); words are stemmed, so
     # "bills" matches "bill". ts_rank_cd scores how many query terms occur and how close together;
     # title terms carry weight A (1.0) vs B (0.4) for content. Normalization 32 maps the rank to

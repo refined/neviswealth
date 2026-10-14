@@ -15,7 +15,7 @@ class Settings:
     # Where clients reach the service; only used for log messages (compose sets it from APP_PORT).
     public_url: str = "http://localhost:8000"
 
-    # Embeddings. `hashing` selects a dependency-free deterministic embedder (tests / offline).
+    # Embeddings.
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dim: int = 384
     model_cache_dir: str | None = None

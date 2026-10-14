@@ -6,15 +6,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.config import Settings
-from app.indexing.embedder import HashingEmbedder
 from app.indexing.worker import IndexingWorker
 from app.main import create_app
+from tests.fakes import HashingEmbedder
 
 
 def make_settings(database_url: str, **overrides: Any) -> Settings:
-    return Settings(
-        database_url=database_url, embedding_model="hashing", run_worker=False, **overrides
-    )
+    return Settings(database_url=database_url, run_worker=False, **overrides)
 
 
 @pytest.fixture(scope="session")

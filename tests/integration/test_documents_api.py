@@ -3,10 +3,10 @@ import uuid
 import numpy as np
 from fastapi.testclient import TestClient
 
-from app.indexing.embedder import HashingEmbedder
 from app.indexing.summarizer import ExtractiveSummarizer
 from app.indexing.text import split_sentences
 from app.indexing.worker import IndexingWorker
+from tests.fakes import HashingEmbedder
 
 BILL = (
     "Florida Power & Light monthly statement. Service address: 1450 Brickell Avenue, Miami. "
