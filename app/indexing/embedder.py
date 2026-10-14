@@ -28,10 +28,19 @@ def l2_normalize(m: np.ndarray) -> np.ndarray:
 
 
 class FastEmbedEmbedder:
-    def __init__(self, model_name: str, cache_dir: str | None = None, threads: int = 1) -> None:
+    def __init__(
+        self,
+        model_name: str,
+        cache_dir: str | None = None,
+        threads: int = 1,
+        batch_size: int = 32,
+    ) -> None:
         from fastembed import TextEmbedding
 
+        if batch_size < 1:
+            raise ValueError(f"batch_size must be at least 1, got {batch_size}")
         self.model_name = model_name
+        self._batch_size = batch_size
         self._model = TextEmbedding(model_name, cache_dir=cache_dir, threads=threads)
         self.dim = int(self._model.embedding_size)
         # The worker thread and request threads share one ONNX session.
@@ -41,7 +50,7 @@ class FastEmbedEmbedder:
         if not texts:
             return np.zeros((0, self.dim), dtype=np.float32)
         with self._lock:
-            vectors = list(self._model.passage_embed(list(texts)))
+            vectors = list(self._model.passage_embed(list(texts), batch_size=self._batch_size))
         return l2_normalize(np.asarray(vectors, dtype=np.float32))
 
     def embed_query(self, text: str) -> np.ndarray:
@@ -50,8 +59,12 @@ class FastEmbedEmbedder:
         return l2_normalize(np.asarray(vector, dtype=np.float32))
 
 
-def create_embedder(model_name: str, cache_dir: str | None = None, threads: int = 1) -> Embedder:
-    embedder = FastEmbedEmbedder(model_name, cache_dir=cache_dir, threads=threads)
+def create_embedder(
+    model_name: str, cache_dir: str | None = None, threads: int = 1, batch_size: int = 32
+) -> Embedder:
+    embedder = FastEmbedEmbedder(
+        model_name, cache_dir=cache_dir, threads=threads, batch_size=batch_size
+    )
     if embedder.dim != EMBEDDING_DIM:
         raise ValueError(
             f"Embedding model {model_name!r} produces {embedder.dim}-d vectors, "

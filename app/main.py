@@ -43,6 +43,7 @@ def build_container(settings: Settings, embedder: Embedder | None = None) -> Con
         settings.embedding_model,
         cache_dir=settings.model_cache_dir,
         threads=settings.embedding_threads,
+        batch_size=settings.embedding_batch_size,
     )
     summarizer = ExtractiveSummarizer(
         embedder,

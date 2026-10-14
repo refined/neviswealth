@@ -20,6 +20,9 @@ class Settings:
     model_cache_dir: str | None = None
     # One intra-op thread keeps background indexing from starving requests on a 1 vCPU box.
     embedding_threads: int = 1
+    # Peak indexing memory grows with the batch (fastembed defaults to 256, which needs >1 GB on
+    # long documents); 32 keeps the worst case around 0.7 GB, see README "Deep dive".
+    embedding_batch_size: int = 32
 
     # Background indexing worker.
     run_worker: bool = True

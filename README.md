@@ -502,6 +502,21 @@ How to read the columns (higher is better for hit@1 and MRR, lower for the rest)
 - Documents stuck in `processing` after a crash are picked up again after 5 minutes.
 - On one vCPU the model runs with a single thread, so indexing does not starve search requests.
 
+**Embedding batch size.** fastembed embeds 256 texts per batch by default. ONNX memory grows with
+batch size × sequence length², so a 4,500-word document (53 chunks, 258 summary sentences) peaked
+at 1.17 GB and the 1 GB container was OOM-killed. Measured peak memory of the whole process:
+
+| Batch | That document | Worst case (300 inputs at max length) |
+|---|---|---|
+| 256 | 1169 MB | - |
+| 64 | 492 MB | 1174 MB |
+| 32 | - | 688 MB |
+| 16 | 294 MB | - |
+
+The default is 32 (`EMBEDDING_BATCH_SIZE` overrides it). Smaller batches are also faster on one
+CPU: each batch is padded to its longest text, so short sentences waste less work (13 s at 16 vs
+29 s at 256 for that document).
+
 ## Use of LLMs
 
 As the assignment encourages, this was built with an AI coding assistant (Claude Code), which

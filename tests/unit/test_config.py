@@ -10,6 +10,7 @@ def test_defaults_without_environment() -> None:
     assert settings == Settings()
     assert settings.run_worker is True
     assert settings.api_key is None
+    assert settings.embedding_batch_size == 32
 
 
 def test_values_are_parsed_by_field_type() -> None:
@@ -20,6 +21,7 @@ def test_values_are_parsed_by_field_type() -> None:
             "WORKER_MAX_ATTEMPTS": "5",
             "SEMANTIC_MIN_SIMILARITY": "0.3",
             "API_KEY": "s3cret",
+            "EMBEDDING_BATCH_SIZE": "16",
             "UNRELATED_VARIABLE": "ignored",
         }
     )
@@ -28,6 +30,7 @@ def test_values_are_parsed_by_field_type() -> None:
     assert settings.worker_max_attempts == 5
     assert settings.semantic_min_similarity == 0.3
     assert settings.api_key == "s3cret"
+    assert settings.embedding_batch_size == 16
 
 
 @pytest.mark.parametrize(("raw", "expected"), [("1", True), ("Yes", True), ("off", False)])
