@@ -207,7 +207,7 @@ flowchart TB
         type["<b>document type</b><br/>contains a phrase of the type<br/><i>utility bill, lease agreement</i>"]
     end
 
-    score["<b>2 · Score</b> from 0 to 1<br/>each signal → a confidence · needs words, a type phrase or meaning ≥ 0.22<br/>combined with noisy-OR"]
+    score["<b>2 · Score</b> from 0 to 1<br/>each signal → a confidence · needs words, a type phrase or meaning ≥ 0.22<br/>combined with noisy-OR · below half of the best → dropped"]
     highlight["<b>3 · Highlight</b><br/>matched words marked by ts_headline · else the closest chunk · else the start"]
 
     input --> query --> find
@@ -239,7 +239,7 @@ electricity bill right after upload, before background processing has finished.
 - **How it is used.** On upload, each document is cut into chunks of up to 120 words, and each
   chunk is embedded together with the document title. At search time only the query is embedded,
   and the nearest chunks are found.
-- **Example:** `where did the money come from` → *Source of wealth declaration* (score 0.79).
+- **Example:** `where did the money come from` → *Source of wealth declaration* (score 0.86).
 
 **3. Domain knowledge (document types).**
 
@@ -267,8 +267,11 @@ electricity bill right after upload, before background processing has finished.
   signal is enough, and signals that agree add up.
 - Each signal also has a minimum threshold, so a meaningless query returns nothing instead of the
   "least bad" documents: `qwertyzxcv` → `[]`.
+- Documents that score less than half of the best document are dropped, so a strong hit is not
+  followed by a tail of weak "somewhat similar" ones.
 - Every hit says why it matched (`matched_on`: `title`, `content`, `semantic`,
-  `document_type:proof_of_address`) and has a highlighted snippet.
+  `document_type:proof_of_address`) and has a highlighted snippet: the words or type phrases the
+  content really contains, else the closest chunk.
 
 **Postgres:**
 - a generated `tsvector` column with a GIN inverted index (words);
@@ -482,12 +485,36 @@ How to read the columns (higher is better for hit@1 and MRR, lower for the rest)
   | blended vector (now) | 40/42 | 40/42 | 0.79 |
 - **The trade-off:**
   - documents found *only* through their type score lower: `risk appetite` → the risk
-    questionnaire at 0.35 (it was 0.71 as a separate signal);
+    questionnaire at 0.35 (it was 0.71 as a separate signal; the "investor questionnaire" phrase
+    added during tuning brings it to 0.81);
   - their `matched_on` says `semantic` rather than `document_type:…`;
   - a wrongly matched type pulls harder: `retirement planning` touches *estate planning*, so the
     will comes second (0.49).
 - **Why α = 1.0:** α = 0.5 finds the same documents with lower scores. At α = 2.0 the wrong type
   starts to win.
+
+**Tuning: fewer weak results.** Measured on the 42 eval queries (each returns up to 20
+documents):
+
+| | Expected first | Expected in top 3 | Expected documents shown | Unexpected documents shown |
+|---|---|---|---|---|
+| before | 40/42 | 40/42 | 53 | 133 |
+| + drop documents below half of the best score | 40/42 | 40/42 | 48 | 30 |
+| + more taxonomy phrases | 40/42 | 40/42 | 48 | 26 |
+
+- **Relative cut-off instead of a higher gate.** Most unexpected documents were "meaning only"
+  neighbours at 0.13–0.30 next to a 0.8–0.9 hit. Raising the semantic gate to 0.28 lost a top-3
+  answer and still kept 63 of them; the relative cut keeps every top-3 answer. The 5 expected
+  documents it drops are secondary ones, such as the tax return for `proof of income` (0.36 next
+  to the payslip at 0.83).
+- **Taxonomy phrases** were added per type from KYC vocabulary and kept only if the eval did not
+  get worse. Phrases for insurance, proof of address and investment policy were left out: they
+  pulled in wrong types (`retirement planning` → the life policy first).
+- **The other settings** (blend weight, type threshold, semantic floor and ceiling, semantic gate)
+  were swept too; no change beat the current values, so they stay.
+- **Highlights** mark only what the content really contains, and adjacent words merge into one
+  phrase: `<mark>tenancy agreement</mark>` instead of `address`, `Billing` and other single words
+  of phrases that are not in the text.
 
 **Plain SQL instead of an ORM.**
 - The schema is [SQL](db/migrations/0001_initial.sql).
